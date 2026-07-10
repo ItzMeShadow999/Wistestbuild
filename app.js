@@ -2294,11 +2294,11 @@ document.getElementById('canvasBgTransparent').addEventListener('change', () => 
   'use strict';
 
   var STORAGE_KEY = 'wis-theme';
-  var DEFAULT_THEME = 'original';
+  var DEFAULT_THEME = '𝙾𝚛𝚒𝚐𝚒𝚗𝚊𝚕';
 
   var THEMES = [
-    { id: 'original', name: 'Original',   icon: '𝕎', c1: '#0f1013', c2: '#5865f2',
-      blurb: 'The one you already know.' },
+    { id: 'original', name: '𝙾𝚛𝚒𝚐𝚒𝚗𝚊𝚕',   icon: '𝕎', c1: '#0f1013', c2: '#5865f2',
+      blurb: '𝚃𝚑𝚎 𝚘𝚛𝚒𝚐𝚒𝚗𝚊𝚕 𝚆.𝙸.𝚂 𝚝𝚑𝚎𝚖𝚎.' },
     { id: 'white',    name: 'PURE White', icon: '⬤', c1: '#ffffff', c2: '#000000',
       blurb: 'Eye-burning. Legally concerning.', gated: true },
     { id: 'kawaii',   name: 'Kawaii',     icon: '𖹭', c1: '#fff0f5', c2: '#ffb6c1',
