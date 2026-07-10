@@ -1662,9 +1662,12 @@
   background-image: none;
 }
 :root[data-theme="kawaii"] body {
-  background-image:
-    radial-gradient(ellipse 80% 60% at 80% -10%, rgba(255,182,193,0.4) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 10% 100%, rgba(255,143,191,0.28) 0%, transparent 55%);
+  background:
+    radial-gradient(ellipse 110% 55% at 90%   0%, rgba(255,128,176,0.38) 0%, transparent 58%),
+    radial-gradient(ellipse  80% 60% at  0% 100%, rgba(232,180,248,0.32) 0%, transparent 55%),
+    radial-gradient(ellipse  60% 45% at 50%  52%, rgba(255,209,230,0.20) 0%, transparent 65%),
+    linear-gradient(155deg, #fff0f5 0%, #fde4f0 28%, #f5d8f5 55%, #fce4f0 78%, #fff0f5 100%);
+  background-attachment: fixed;
 }
 :root[data-theme="discord"] body {
   background-image:
@@ -1935,14 +1938,17 @@
      --k-plum:      #8a3a6e   (rich plum text)
    ══════════════════════════════════════════════════════════════════ */
 
-/* ── Body gradient: full bubbly pink wash ── */
+/* ── Body gradient: full bubbly pink wash ──
+   IMPORTANT: single background shorthand only — never split into
+   background + background-image or the flat base creates a seam.
+   background-attachment:fixed keeps it cohesive at any scroll depth. */
 :root[data-theme="kawaii"] body {
-  background: linear-gradient(135deg, #fff0f5 0%, #ffe3ef 35%, #ffd6e7 65%, #ffccec 100%);
-  background-image:
-    radial-gradient(ellipse 90% 70% at 85% -5%,  rgba(255,130,180,0.45) 0%, transparent 60%),
-    radial-gradient(ellipse 70% 50% at 5%  95%,  rgba(232,180,248,0.38) 0%, transparent 55%),
-    radial-gradient(ellipse 50% 40% at 50% 50%,  rgba(255,209,230,0.22) 0%, transparent 70%),
-    linear-gradient(135deg, #fff0f5 0%, #ffe3ef 40%, #ffeaf5 100%);
+  background:
+    radial-gradient(ellipse 110% 55% at 90%   0%, rgba(255,128,176,0.38) 0%, transparent 58%),
+    radial-gradient(ellipse  80% 60% at  0% 100%, rgba(232,180,248,0.32) 0%, transparent 55%),
+    radial-gradient(ellipse  60% 45% at 50%  52%, rgba(255,209,230,0.20) 0%, transparent 65%),
+    linear-gradient(155deg, #fff0f5 0%, #fde4f0 28%, #f5d8f5 55%, #fce4f0 78%, #fff0f5 100%);
+  background-attachment: fixed;
 }
 
 /* ── Scrollbar ── */
