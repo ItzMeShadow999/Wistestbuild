@@ -69,6 +69,14 @@
         height: 48px;
         flex-shrink: 0;
         user-select: none;
+        /* Some themes (e.g. Kawaii) add a backdrop-filter to this bar,
+           which creates its own stacking context and traps the theme
+           popover (a child, positioned absolute) inside it — that then
+           loses to later-in-DOM elements like #dropZone. An explicit
+           z-index here keeps the whole titlebar (and its popover) on
+           top regardless of what a theme adds to it. */
+        position: relative;
+        z-index: 50;
       }
       .titlebar-brand {
         font-size: 12px;
@@ -1570,9 +1578,12 @@
   --text:        #000000;
   --text-muted:  #3a3a3a;
   --text-dim:    #7a7a7a;
-  --success:     #067d3f;
-  --error:       #c81e1e;
-  --warn:        #8a5b00;
+  /* Grayscale only — no hue allowed in this theme. Status states are
+     distinguished by lightness (and weight, in the callout/status
+     markup) instead of color. */
+  --success:     #2b2b2b;
+  --error:       #000000;
+  --warn:        #595959;
   --radius-sm:   3px;
   --radius-md:   4px;
   --radius-lg:   6px;
@@ -1692,6 +1703,14 @@
 
 :root[data-theme="white"] .btn:hover,
 :root[data-theme="kawaii"] .btn:hover { color: var(--text); }
+
+:root[data-theme="white"] .toggle-switch input:checked + .toggle-slider {
+  background: #000; box-shadow: inset 0 2px 4px rgba(0,0,0,0.18), 0 0 8px rgba(0,0,0,0.25);
+}
+:root[data-theme="white"] .warn-callout {
+  background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.22); color: #000;
+}
+:root[data-theme="white"] .warn-callout-close { color: #000; }
 
 :root[data-theme="white"] ::selection { background: rgba(0,0,0,0.16); color: #000; }
 :root[data-theme="kawaii"] ::selection { background: rgba(255,105,180,0.4); color: #5c1f3a; }
@@ -2595,3 +2614,517 @@
   color: #5c1f3a;
 }
 :root[data-theme="kawaii"] .theme-modal-btn--confirm:hover { filter: brightness(1.1); }
+
+/* ══════════════════════════════════════════════════════════════════
+   DISCORD FULL RETHEME — Exact Discord dark mode recreation
+   Primary:   #313338  Surface:   #2b2d31  Dark:      #1e1f22
+   Elevated:  #383a40  Blurple:   #5865f2  Text:      #dbdee1
+   Muted:     #949ba4  Dim:       #6d6f78
+   Font: "gg sans", "Noto Sans", Helvetica Neue, Helvetica, Arial
+   ══════════════════════════════════════════════════════════════════ */
+
+:root[data-theme="discord"] body {
+  font-family: "gg sans", "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  background: #313338;
+  background-image:
+    radial-gradient(ellipse 80% 60% at 80% -10%, rgba(88,101,242,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 10% 100%, rgba(88,101,242,0.04) 0%, transparent 55%);
+}
+
+/* ── Titlebar ── */
+:root[data-theme="discord"] .titlebar {
+  background: #1e1f22;
+  border-bottom: 1px solid rgba(0,0,0,0.35);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.2);
+  border-radius: 0;
+}
+:root[data-theme="discord"] .titlebar-brand {
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+:root[data-theme="discord"] .titlebar-sep { background: rgba(255,255,255,0.08); }
+:root[data-theme="discord"] #titlebarStatus { color: #949ba4; font-size: 13px; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; }
+
+/* ── Main tabs ── */
+:root[data-theme="discord"] .main-tabs {
+  border-bottom: 2px solid #1e1f22;
+  background: #2b2d31;
+  padding: 0 6px;
+  gap: 0;
+}
+:root[data-theme="discord"] .tab-button {
+  color: #949ba4;
+  font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  padding: 14px 16px 10px;
+  border-radius: 0;
+  background: none;
+}
+:root[data-theme="discord"] .tab-button:hover { color: #dbdee1; background: rgba(255,255,255,0.05); }
+:root[data-theme="discord"] .tab-button[aria-selected="true"] { color: #fff; font-weight: 600; background: none; }
+:root[data-theme="discord"] .tab-button::after { background: #5865f2; height: 2px; border-radius: 0; bottom: -2px; }
+:root[data-theme="discord"] .tab-button[data-tab="advanced"]::after { bottom: -2px; }
+
+/* ── Preview wrap ── */
+:root[data-theme="discord"] .preview-wrap {
+  background: #1e1f22;
+  border: 1px solid rgba(0,0,0,0.3);
+  border-radius: 8px;
+}
+:root[data-theme="discord"] .preview-wrap.drag-over {
+  border-color: #5865f2;
+  background: rgba(88,101,242,0.05);
+  box-shadow: 0 0 0 2px rgba(88,101,242,0.25);
+}
+:root[data-theme="discord"] .preview-empty { color: #949ba4; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; }
+:root[data-theme="discord"] .preview-empty-sub { color: #6d6f78; }
+:root[data-theme="discord"] .preview-loading { color: #949ba4; }
+:root[data-theme="discord"] .spinner { border-color: rgba(88,101,242,0.2); border-top-color: #5865f2; }
+:root[data-theme="discord"] .progress-track { background: rgba(0,0,0,0.35); }
+:root[data-theme="discord"] .progress-bar { background: #5865f2; }
+:root[data-theme="discord"] .progress-label { color: #6d6f78; }
+:root[data-theme="discord"] .preview-image { border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+:root[data-theme="discord"] .preview-meta { color: #6d6f78; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; font-size: 11px; }
+
+/* ── Buttons ── */
+:root[data-theme="discord"] .btn {
+  background: #4e5058;
+  border: none;
+  color: #fff;
+  border-radius: 3px;
+  font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  height: 32px;
+  padding: 2px 16px;
+  box-shadow: none;
+  transition: background 0.15s ease;
+}
+:root[data-theme="discord"] .btn:hover:not(:disabled) { background: #5c5e68; color: #fff; box-shadow: none; }
+:root[data-theme="discord"] .btn:focus-visible { box-shadow: 0 0 0 2px rgba(88,101,242,0.5); }
+:root[data-theme="discord"] .btn:disabled { background: #3a3c42; color: #6d6f78; opacity: 1; }
+:root[data-theme="discord"] .btn-primary { background: #5865f2; border-radius: 3px; box-shadow: none; }
+:root[data-theme="discord"] .btn-primary:hover:not(:disabled) { background: #4752c4; box-shadow: none; }
+
+/* ── Inputs ── */
+:root[data-theme="discord"] .input {
+  background: #1e1f22;
+  border: none;
+  border-radius: 3px;
+  color: #dbdee1;
+  font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif;
+  font-size: 16px;
+  height: 40px;
+  padding: 10px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35);
+  transition: box-shadow 0.1s ease;
+}
+:root[data-theme="discord"] .input::placeholder { color: #6d6f78; }
+:root[data-theme="discord"] .input:focus { box-shadow: inset 0 0 0 1px #5865f2, 0 0 0 2px rgba(88,101,242,0.25); outline: none; }
+:root[data-theme="discord"] .input[readonly] { color: #949ba4; }
+
+/* ── Labels ── */
+:root[data-theme="discord"] .field-label {
+  color: #b5bac1;
+  font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* ── Status bar ── */
+:root[data-theme="discord"] .status-bar { color: #949ba4; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; }
+:root[data-theme="discord"] .status-bar[data-tone="success"] { color: #23a55a; }
+:root[data-theme="discord"] .status-bar[data-tone="error"]   { color: #f23f42; }
+:root[data-theme="discord"] .status-bar[data-tone="warn"]    { color: #f0b232; }
+
+/* ── Section divider ── */
+:root[data-theme="discord"] .section-divider-label { color: #949ba4; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+:root[data-theme="discord"] .section-divider-line { background: rgba(0,0,0,0.3); }
+
+/* ── Toggle ── */
+:root[data-theme="discord"] .toggle-slider { background: #4e5058; border-color: transparent; }
+:root[data-theme="discord"] .toggle-slider::before { background: #fff; }
+:root[data-theme="discord"] .toggle-switch input:checked + .toggle-slider { background: #23a55a; box-shadow: none; border-color: transparent; }
+:root[data-theme="discord"] .toggle-switch input:checked + .toggle-slider::before { background: #fff; }
+
+/* ── Warn callout ── */
+:root[data-theme="discord"] .warn-callout { background: rgba(240,178,50,0.06); border-color: rgba(240,178,50,0.22); color: #dbdee1; }
+:root[data-theme="discord"] .warn-callout-close { color: #6d6f78; }
+
+/* ── Format chips (framer/converter) ── */
+:root[data-theme="discord"] .format-chip { background: #383a40; border-color: transparent; color: #dbdee1; border-radius: 3px; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; font-size: 13px; font-weight: 500; }
+:root[data-theme="discord"] .format-chip:hover { background: #4e5058; color: #fff; border-color: transparent; }
+:root[data-theme="discord"] .format-chip.active { background: #5865f2; border-color: transparent; color: #fff; box-shadow: none; }
+
+/* ── Quality slider ── */
+:root[data-theme="discord"] .quality-slider::-webkit-slider-thumb { border-color: #5865f2; background: #fff; }
+:root[data-theme="discord"] .quality-slider::-moz-range-thumb { border-color: #5865f2; background: #fff; }
+:root[data-theme="discord"] .quality-val { color: #dbdee1; }
+
+/* ── GIF note ── */
+:root[data-theme="discord"] .gif-note { background: rgba(88,101,242,0.07); border-color: rgba(88,101,242,0.2); color: #949ba4; }
+
+/* ── Converter select ── */
+:root[data-theme="discord"] .conv-format-select { background: #1e1f22; border: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35); color: #dbdee1; border-radius: 3px; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; }
+:root[data-theme="discord"] .conv-format-select:focus { box-shadow: inset 0 0 0 1px #5865f2; outline: none; }
+:root[data-theme="discord"] .conv-format-select option { background: #2b2d31; color: #dbdee1; }
+
+/* ══════════════════════════════════════════════════════════════════
+   DISCORD — Advanced Editor Panel
+   ══════════════════════════════════════════════════════════════════ */
+:root[data-theme="discord"] #advancedEditorPanel .card { background: #2b2d31; border-color: rgba(0,0,0,0.25); border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+:root[data-theme="discord"] #advancedEditorPanel .card:hover { background: #2e3035; border-color: rgba(0,0,0,0.4); }
+:root[data-theme="discord"] #advancedEditorPanel .card-header { background: #2b2d31; border-bottom-color: rgba(0,0,0,0.25); }
+:root[data-theme="discord"] #advancedEditorPanel .card-icon { background: rgba(88,101,242,0.15); border-color: rgba(88,101,242,0.2); }
+:root[data-theme="discord"] #advancedEditorPanel .card-title { color: #dbdee1; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; font-weight: 600; }
+:root[data-theme="discord"] #advancedEditorPanel .card-subtitle { color: #949ba4; }
+
+:root[data-theme="discord"] #advancedEditorPanel .ae-brand { color: #5865f2; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; font-weight: 800; }
+:root[data-theme="discord"] #advancedEditorPanel .ae-brand-sub { color: #949ba4; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; }
+
+:root[data-theme="discord"] #advancedEditorPanel input[type="text"],
+:root[data-theme="discord"] #advancedEditorPanel input[type="number"],
+:root[data-theme="discord"] #advancedEditorPanel select {
+  background: #1e1f22; border: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35); color: #dbdee1; border-radius: 3px; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+:root[data-theme="discord"] #advancedEditorPanel input:focus,
+:root[data-theme="discord"] #advancedEditorPanel select:focus { box-shadow: inset 0 0 0 1px #5865f2, 0 0 0 2px rgba(88,101,242,0.2); outline: none; }
+:root[data-theme="discord"] #advancedEditorPanel input::placeholder { color: #6d6f78; }
+:root[data-theme="discord"] #advancedEditorPanel input[readonly] { color: #949ba4; }
+:root[data-theme="discord"] #advancedEditorPanel select option { background: #2b2d31; color: #dbdee1; }
+
+:root[data-theme="discord"] #advancedEditorPanel input[type="range"]::-webkit-slider-track {
+  background: linear-gradient(90deg, #5865f2 0%, #5865f2 calc(var(--pct,0%)), #383a40 calc(var(--pct,0%)), #383a40 100%);
+  border-radius: 3px; height: 6px;
+}
+:root[data-theme="discord"] #advancedEditorPanel input[type="range"]::-webkit-slider-thumb { background: #fff; border-color: #5865f2; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+:root[data-theme="discord"] #advancedEditorPanel input[type="range"]::-moz-range-track { background: linear-gradient(90deg, #5865f2 0%, #5865f2 calc(var(--pct,0%)), #383a40 calc(var(--pct,0%)), #383a40 100%); }
+:root[data-theme="discord"] #advancedEditorPanel input[type="range"]::-moz-range-thumb { background: #fff; border-color: #5865f2; }
+
+:root[data-theme="discord"] #advancedEditorPanel label.field-label { color: #b5bac1; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; }
+:root[data-theme="discord"] #advancedEditorPanel .adj-label { color: #b5bac1; }
+:root[data-theme="discord"] #advancedEditorPanel .adj-val { color: #5865f2; font-weight: 700; }
+:root[data-theme="discord"] #advancedEditorPanel .adj-row:hover { background: rgba(255,255,255,0.04); }
+
+:root[data-theme="discord"] #advancedEditorPanel button {
+  background: #4e5058; border: none; color: #fff; border-radius: 3px;
+  font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif;
+  font-size: 14px; font-weight: 500; box-shadow: none; transition: background 0.15s ease;
+}
+:root[data-theme="discord"] #advancedEditorPanel button:hover:not(:disabled) { background: #5c5e68; border-color: transparent; box-shadow: none; color: #fff; }
+:root[data-theme="discord"] #advancedEditorPanel button:focus-visible { box-shadow: 0 0 0 2px rgba(88,101,242,0.5); }
+:root[data-theme="discord"] #advancedEditorPanel button::after { background: none; }
+:root[data-theme="discord"] #advancedEditorPanel button.primary { background: #5865f2; border: none; color: #fff; box-shadow: none; animation: none; }
+:root[data-theme="discord"] #advancedEditorPanel button.primary:hover:not(:disabled) { background: #4752c4; box-shadow: none; }
+:root[data-theme="discord"] #advancedEditorPanel button.danger { background: rgba(242,63,66,0.12); border-color: rgba(242,63,66,0.28); color: #f23f42; }
+:root[data-theme="discord"] #advancedEditorPanel button.danger:hover:not(:disabled) { background: rgba(242,63,66,0.22); box-shadow: none; }
+:root[data-theme="discord"] #advancedEditorPanel button.success { background: #23a55a; border: none; color: #fff; }
+:root[data-theme="discord"] #advancedEditorPanel button.success:hover:not(:disabled) { background: #1e8a4a; box-shadow: none; }
+
+:root[data-theme="discord"] #advancedEditorPanel .tabs { background: #1e1f22; border-radius: 4px; }
+:root[data-theme="discord"] #advancedEditorPanel .tab-btn { color: #949ba4; border-radius: 3px; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; font-weight: 500; }
+:root[data-theme="discord"] #advancedEditorPanel .tab-btn:hover:not(:disabled) { color: #dbdee1; background: rgba(255,255,255,0.06); }
+:root[data-theme="discord"] #advancedEditorPanel .tab-btn.active { background: #383a40; border-color: transparent; color: #fff; font-weight: 600; box-shadow: none; }
+
+:root[data-theme="discord"] #advancedEditorPanel .preset-tile { background: #383a40; border-color: transparent; border-radius: 4px; }
+:root[data-theme="discord"] #advancedEditorPanel .preset-tile:hover { background: #4e5058; border-color: transparent; box-shadow: none; }
+:root[data-theme="discord"] #advancedEditorPanel .preset-tile.selected { background: rgba(88,101,242,0.18); border-color: #5865f2; box-shadow: none; }
+:root[data-theme="discord"] #advancedEditorPanel .preset-name { color: #dbdee1; }
+:root[data-theme="discord"] #advancedEditorPanel .preset-size { color: #6d6f78; }
+
+:root[data-theme="discord"] #advancedEditorPanel .format-chip { background: #383a40; border-color: transparent; color: #dbdee1; border-radius: 3px; }
+:root[data-theme="discord"] #advancedEditorPanel .format-chip:hover { background: #4e5058; color: #fff; border-color: transparent; }
+:root[data-theme="discord"] #advancedEditorPanel .format-chip.selected { background: #5865f2; border-color: transparent; color: #fff; box-shadow: none; }
+
+:root[data-theme="discord"] #advancedEditorPanel .swatch { border-color: rgba(0,0,0,0.3); border-radius: 4px; }
+:root[data-theme="discord"] #advancedEditorPanel .swatch:hover { border-color: #5865f2; box-shadow: 0 0 0 2px rgba(88,101,242,0.28); }
+:root[data-theme="discord"] #advancedEditorPanel .swatch.selected { border-color: #5865f2; box-shadow: 0 0 0 2px rgba(88,101,242,0.45); }
+
+:root[data-theme="discord"] #advancedEditorPanel .canvas-wrap {
+  background: repeating-conic-gradient(#2b2d31 0% 25%, #1e1f22 0% 50%) 0 0 / 16px 16px;
+  border-color: rgba(0,0,0,0.3); border-radius: 4px;
+}
+:root[data-theme="discord"] #advancedEditorPanel .canvas-wrap:hover { border-color: #5865f2; }
+:root[data-theme="discord"] #advancedEditorPanel .canvas-wrap.drag-over { border-color: #5865f2; background: rgba(88,101,242,0.05); box-shadow: 0 0 0 2px rgba(88,101,242,0.25); }
+:root[data-theme="discord"] #advancedEditorPanel .canvas-overlay-empty { color: #6d6f78; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; }
+
+:root[data-theme="discord"] #advancedEditorPanel .status-bar { color: #949ba4; }
+:root[data-theme="discord"] #advancedEditorPanel .status-bar[data-tone="success"] { color: #23a55a; }
+:root[data-theme="discord"] #advancedEditorPanel .status-bar[data-tone="error"]   { color: #f23f42; }
+:root[data-theme="discord"] #advancedEditorPanel .status-bar[data-tone="info"]    { color: #5865f2; }
+
+:root[data-theme="discord"] #advancedEditorPanel .toggle-track { background: #4e5058; border-color: transparent; }
+:root[data-theme="discord"] #advancedEditorPanel .toggle-track::before { background: #fff; }
+:root[data-theme="discord"] #advancedEditorPanel .toggle input:checked + .toggle-track { background: #23a55a; border-color: transparent; box-shadow: none; }
+:root[data-theme="discord"] #advancedEditorPanel .toggle input:checked + .toggle-track::before { background: #fff; }
+
+:root[data-theme="discord"] #advancedEditorPanel .section-sep { background: rgba(0,0,0,0.3); }
+
+:root[data-theme="discord"] #advancedEditorPanel .badge-purple { background: rgba(88,101,242,0.18); color: #949cf7; border-color: rgba(88,101,242,0.28); }
+:root[data-theme="discord"] #advancedEditorPanel .badge-yellow { background: rgba(240,178,50,0.12); color: #f0b232; border-color: rgba(240,178,50,0.22); }
+
+:root[data-theme="discord"] #advancedEditorPanel .filter-strip::-webkit-scrollbar-thumb { background: #1e1f22; }
+:root[data-theme="discord"] #advancedEditorPanel .filter-tile:hover { border-color: #5865f2; box-shadow: none; }
+:root[data-theme="discord"] #advancedEditorPanel .filter-tile.selected { border-color: #5865f2; box-shadow: 0 0 0 1px rgba(88,101,242,0.35); }
+:root[data-theme="discord"] #advancedEditorPanel .filter-tile-name { color: #949ba4; }
+
+:root[data-theme="discord"] #advancedEditorPanel .rotation-ring { border-color: rgba(88,101,242,0.3); background: radial-gradient(circle, rgba(88,101,242,0.07) 0%, transparent 70%); box-shadow: none; }
+:root[data-theme="discord"] #advancedEditorPanel .rotation-ring:hover { border-color: #5865f2; box-shadow: 0 0 0 2px rgba(88,101,242,0.18); }
+:root[data-theme="discord"] #advancedEditorPanel .rotation-handle::before { background: #5865f2; box-shadow: 0 0 6px #5865f2; }
+:root[data-theme="discord"] #advancedEditorPanel .rotation-val { color: #949cf7; }
+
+:root[data-theme="discord"] #advancedEditorPanel .flip-btn { background: #4e5058; border-color: transparent; color: #dbdee1; }
+:root[data-theme="discord"] #advancedEditorPanel .flip-btn:hover { background: #5c5e68; border-color: transparent; box-shadow: none; color: #fff; }
+
+:root[data-theme="discord"] #advancedEditorPanel .budget-bar-wrap { background: #1e1f22; border-color: rgba(0,0,0,0.3); }
+:root[data-theme="discord"] #advancedEditorPanel .budget-bar { background: #5865f2; box-shadow: none; }
+:root[data-theme="discord"] #advancedEditorPanel .budget-tier { background: #383a40; border-color: transparent; border-radius: 4px; }
+:root[data-theme="discord"] #advancedEditorPanel .budget-tier:hover { background: #4e5058; border-color: transparent; }
+:root[data-theme="discord"] #advancedEditorPanel .budget-tier.reachable { border-color: rgba(35,165,90,0.38); background: rgba(35,165,90,0.08); }
+:root[data-theme="discord"] #advancedEditorPanel .budget-tier.warning   { border-color: rgba(240,178,50,0.32); background: rgba(240,178,50,0.07); }
+:root[data-theme="discord"] #advancedEditorPanel .budget-tier.over      { border-color: rgba(242,63,66,0.38); background: rgba(242,63,66,0.07); }
+:root[data-theme="discord"] #advancedEditorPanel .budget-tier-name { color: #dbdee1; }
+:root[data-theme="discord"] #advancedEditorPanel .budget-tier-limit { color: #6d6f78; }
+:root[data-theme="discord"] #advancedEditorPanel .budget-tier-size { color: #949ba4; }
+
+:root[data-theme="discord"] #advancedEditorPanel .tip-warn { color: #f0b232; }
+:root[data-theme="discord"] #advancedEditorPanel .tip-info { color: #949cf7; }
+:root[data-theme="discord"] #advancedEditorPanel .tip-good { color: #23a55a; }
+
+/* ═══ Discord — WCP colour picker ═══ */
+:root[data-theme="discord"] .wcp-trigger { background: #2b2d31; border-color: rgba(0,0,0,0.35); }
+:root[data-theme="discord"] .wcp-trigger:hover { border-color: #5865f2; }
+:root[data-theme="discord"] .wcp-hex-inline { color: #dbdee1; }
+:root[data-theme="discord"] .wcp-hex-inline:focus { background: rgba(88,101,242,0.1); color: #fff; }
+:root[data-theme="discord"] .wcp-popover { background: #111214; border-color: rgba(0,0,0,0.55); box-shadow: 0 8px 28px rgba(0,0,0,0.55); border-radius: 4px; }
+:root[data-theme="discord"] .wcp-preview-row { border-color: rgba(0,0,0,0.3); }
+:root[data-theme="discord"] .wcp-preview-after { border-left-color: rgba(0,0,0,0.2); }
+:root[data-theme="discord"] .wcp-input { background: #1e1f22; border-color: rgba(0,0,0,0.35); color: #dbdee1; border-radius: 3px; }
+:root[data-theme="discord"] .wcp-input:focus { border-color: #5865f2; box-shadow: 0 0 0 2px rgba(88,101,242,0.18); }
+:root[data-theme="discord"] .wcp-input-label { color: #949ba4; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+:root[data-theme="discord"] .wcp-preset { border-color: rgba(0,0,0,0.3); border-radius: 3px; }
+:root[data-theme="discord"] .wcp-preset:hover { border-color: #5865f2; }
+
+/* ═══ Discord — Theme switcher ═══ */
+:root[data-theme="discord"] .theme-trigger { background: #383a40; border-color: rgba(0,0,0,0.35); color: #dbdee1; border-radius: 3px; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; }
+:root[data-theme="discord"] .theme-trigger:hover { background: #4e5058; border-color: rgba(0,0,0,0.5); color: #fff; }
+:root[data-theme="discord"] .theme-popover { background: #111214; border-color: rgba(0,0,0,0.6); box-shadow: 0 8px 28px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,0,0,0.4); border-radius: 4px; }
+:root[data-theme="discord"] .theme-option:hover { background: rgba(88,101,242,0.14); border-radius: 3px; }
+:root[data-theme="discord"] .theme-option.is-active { background: rgba(88,101,242,0.2); border-color: transparent; border-radius: 3px; }
+:root[data-theme="discord"] .theme-option-name { color: #dbdee1; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; font-weight: 500; }
+:root[data-theme="discord"] .theme-option-blurb { color: #6d6f78; }
+
+/* ── Gear button ── */
+:root[data-theme="discord"] .gear-btn { color: #5865f2; }
+:root[data-theme="discord"] .gear-btn:hover { background: rgba(88,101,242,0.12); }
+:root[data-theme="discord"] .gear-btn[aria-pressed="true"] { background: rgba(88,101,242,0.18); color: #5865f2; }
+
+/* ── Advanced panel ── */
+:root[data-theme="discord"] .advanced-panel { background: #2b2d31; border-color: rgba(0,0,0,0.3); border-radius: 6px; }
+:root[data-theme="discord"] .advanced-label { color: #dbdee1; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; }
+
+/* ══════════════════════════════════════════════════════════════════
+   EDGELORD — Flowing animated dark-red / black gradient
+   ══════════════════════════════════════════════════════════════════ */
+
+@keyframes gothicFlow {
+  0%   { background-position: 0% 50%, 100% 0%, 0% 100%, 0% 50%; }
+  25%  { background-position: 50% 0%, 0% 100%, 100% 50%, 25% 75%; }
+  50%  { background-position: 100% 50%, 0% 0%, 100% 100%, 50% 50%; }
+  75%  { background-position: 50% 100%, 100% 0%, 0% 50%, 75% 25%; }
+  100% { background-position: 0% 50%, 100% 0%, 0% 100%, 0% 50%; }
+}
+
+@keyframes gothicBloodPulse {
+  0%, 100% { opacity: 0.45; }
+  50%       { opacity: 0.8; }
+}
+
+:root[data-theme="gothic"] body {
+  background:
+    radial-gradient(ellipse 80% 60% at 15% 20%, rgba(139,0,0,0.6) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 70% at 85% 80%, rgba(90,0,0,0.45) 0%, transparent 50%),
+    radial-gradient(ellipse 40% 40% at 50% 50%, rgba(60,0,0,0.3) 0%, transparent 65%),
+    linear-gradient(225deg,
+      #000000 0%,  #060000 8%,  #110000 16%, #220000 24%,
+      #3d0000 32%, #630000 40%, #8b0000 50%,
+      #630000 60%, #3d0000 68%, #220000 76%,
+      #110000 84%, #060000 92%, #000000 100%
+    );
+  background-size: 350% 350%, 350% 350%, 200% 200%, 600% 600%;
+  background-attachment: fixed;
+  animation: gothicFlow 20s ease-in-out infinite;
+  image-rendering: auto;
+}
+
+/* Make UI surfaces semi-transparent so the gradient bleeds through */
+:root[data-theme="gothic"] .titlebar {
+  background: rgba(5,0,0,0.88);
+  border-bottom: 1px solid rgba(139,0,0,0.3);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+:root[data-theme="gothic"] .main-tabs {
+  background: rgba(8,0,0,0.7);
+  border-bottom-color: rgba(139,0,0,0.22);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+:root[data-theme="gothic"] .preview-wrap {
+  background: rgba(12,2,2,0.72);
+  border-color: rgba(139,0,0,0.35);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+:root[data-theme="gothic"] .preview-wrap.drag-over {
+  border-color: rgba(200,0,0,0.7);
+  background: rgba(80,0,0,0.18);
+  box-shadow: 0 0 24px rgba(139,0,0,0.35);
+}
+
+:root[data-theme="gothic"] .advanced-panel {
+  background: rgba(10,2,2,0.82);
+  border-color: rgba(128,0,0,0.3);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Advanced Editor cards */
+:root[data-theme="gothic"] #advancedEditorPanel .card {
+  background: rgba(12,2,2,0.78);
+  border-color: rgba(128,0,0,0.32);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+:root[data-theme="gothic"] #advancedEditorPanel .card:hover {
+  background: rgba(20,4,4,0.85);
+  border-color: rgba(160,0,0,0.5);
+}
+:root[data-theme="gothic"] #advancedEditorPanel .card-header {
+  background: rgba(8,0,0,0.5);
+  border-bottom-color: rgba(128,0,0,0.25);
+}
+:root[data-theme="gothic"] #advancedEditorPanel .card-icon {
+  background: linear-gradient(135deg, rgba(139,0,0,0.25), rgba(74,0,0,0.18));
+  border-color: rgba(139,0,0,0.3);
+}
+:root[data-theme="gothic"] #advancedEditorPanel .card-title {
+  background: linear-gradient(90deg, #d8b8b8 0%, #cc4444 40%, #ff6666 60%, #cc4444 80%, #d8b8b8 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: gothicTitleShimmer 6s ease-in-out infinite;
+}
+
+@keyframes gothicTitleShimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50%       { background-position: 100% 50%; }
+}
+
+/* Buttons — blood-red primary */
+:root[data-theme="gothic"] #advancedEditorPanel button.primary {
+  background: linear-gradient(135deg, rgba(139,0,0,0.65) 0%, rgba(80,0,0,0.5) 100%);
+  border-color: rgba(200,0,0,0.5);
+  color: #ffb8b8;
+  box-shadow: 0 0 18px rgba(139,0,0,0.3), inset 0 1px 1px rgba(255,100,100,0.2);
+  animation: gothicButtonBreath 4s ease-in-out infinite;
+}
+@keyframes gothicButtonBreath {
+  0%, 100% { box-shadow: 0 0 14px rgba(139,0,0,0.25), inset 0 1px 1px rgba(255,100,100,0.2); }
+  50%       { box-shadow: 0 0 28px rgba(200,0,0,0.5),  inset 0 1px 1px rgba(255,150,150,0.3); }
+}
+:root[data-theme="gothic"] #advancedEditorPanel button.primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(170,0,0,0.8) 0%, rgba(100,0,0,0.65) 100%);
+  border-color: rgba(220,0,0,0.7);
+  box-shadow: 0 0 36px rgba(200,0,0,0.55), inset 0 1px 1px rgba(255,150,150,0.35);
+  animation-play-state: paused;
+}
+
+/* Scrollbar */
+:root[data-theme="gothic"] ::-webkit-scrollbar-track { background: rgba(0,0,0,0.4); }
+:root[data-theme="gothic"] ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(139,0,0,0.7), rgba(80,0,0,0.5)); border-radius: 999px; }
+:root[data-theme="gothic"] ::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, rgba(200,0,0,0.8), rgba(120,0,0,0.65)); }
+
+/* Theme popover */
+:root[data-theme="gothic"] .theme-popover {
+  background: rgba(8,0,0,0.95);
+  border-color: rgba(128,0,0,0.5);
+  box-shadow: 0 12px 36px rgba(0,0,0,0.7), 0 0 0 1px rgba(139,0,0,0.2);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+:root[data-theme="gothic"] .theme-option:hover { background: rgba(139,0,0,0.18); }
+:root[data-theme="gothic"] .theme-option.is-active { background: rgba(139,0,0,0.22); border-color: rgba(128,0,0,0.4); }
+:root[data-theme="gothic"] .theme-option-name { color: #d8b8b8; }
+:root[data-theme="gothic"] .theme-option-blurb { color: #8a5a5a; }
+
+/* WCP picker */
+:root[data-theme="gothic"] .wcp-popover {
+  background: rgba(10,0,0,0.96);
+  border-color: rgba(128,0,0,0.45);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+:root[data-theme="gothic"] .wcp-input {
+  background: rgba(15,2,2,0.85);
+  border-color: rgba(128,0,0,0.35);
+  color: #d8b8b8;
+}
+:root[data-theme="gothic"] #advancedEditorPanel .canvas-wrap {
+  background: repeating-conic-gradient(rgba(20,2,2,0.9) 0% 25%, rgba(8,0,0,0.85) 0% 50%) 0 0 / 16px 16px;
+}
+
+/* Tabs */
+:root[data-theme="gothic"] #advancedEditorPanel .tabs {
+  background: rgba(8,0,0,0.65);
+  border-radius: 4px;
+}
+:root[data-theme="gothic"] #advancedEditorPanel .tab-btn.active {
+  background: rgba(139,0,0,0.3);
+  border-color: rgba(128,0,0,0.5);
+  color: #ffb8b8;
+  box-shadow: 0 0 12px rgba(139,0,0,0.25);
+}
+
+/* Preset tiles */
+:root[data-theme="gothic"] #advancedEditorPanel .preset-tile { background: rgba(20,4,4,0.7); }
+:root[data-theme="gothic"] #advancedEditorPanel .preset-tile:hover { background: rgba(35,5,5,0.8); border-color: rgba(128,0,0,0.45); box-shadow: 0 4px 12px rgba(139,0,0,0.2); }
+:root[data-theme="gothic"] #advancedEditorPanel .preset-tile.selected { background: rgba(90,0,0,0.25); border-color: rgba(200,0,0,0.55); box-shadow: 0 0 16px rgba(139,0,0,0.28); }
+
+/* Format chips */
+:root[data-theme="gothic"] #advancedEditorPanel .format-chip.selected {
+  background: linear-gradient(135deg, rgba(139,0,0,0.4), rgba(80,0,0,0.3));
+  border-color: rgba(180,0,0,0.55);
+  color: #ffb8b8;
+  box-shadow: 0 0 12px rgba(139,0,0,0.28);
+}
+
+/* Budget bar */
+:root[data-theme="gothic"] #advancedEditorPanel .budget-bar {
+  background: linear-gradient(90deg, #800000, #cc0000, #800000);
+  box-shadow: 0 0 8px rgba(128,0,0,0.4);
+}
+
+/* Rotation handle */
+:root[data-theme="gothic"] #advancedEditorPanel .rotation-handle::before {
+  background: #cc0000;
+  box-shadow: 0 0 10px rgba(200,0,0,0.7);
+}
+:root[data-theme="gothic"] #advancedEditorPanel .rotation-ring {
+  border-color: rgba(128,0,0,0.45);
+  background: radial-gradient(circle, rgba(139,0,0,0.12) 0%, transparent 70%);
+}
+:root[data-theme="gothic"] #advancedEditorPanel .rotation-ring:hover {
+  border-color: rgba(200,0,0,0.65);
+  box-shadow: inset 0 0 14px rgba(139,0,0,0.2), 0 0 18px rgba(139,0,0,0.3);
+}
