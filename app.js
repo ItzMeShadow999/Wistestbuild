@@ -2297,16 +2297,16 @@ document.getElementById('canvasBgTransparent').addEventListener('change', () => 
   var DEFAULT_THEME = 'original';
 
   var THEMES = [
-    { id: 'original', name: 'Original',   icon: '🌌', c1: '#0f1013', c2: '#5865f2',
+    { id: 'original', name: 'Original',   icon: '𝕎', c1: '#0f1013', c2: '#5865f2',
       blurb: 'The one you already know.' },
-    { id: 'white',    name: 'PURE White', icon: '⚡', c1: '#ffffff', c2: '#000000',
+    { id: 'white',    name: 'PURE White', icon: '⬤', c1: '#ffffff', c2: '#000000',
       blurb: 'Eye-burning. Legally concerning.', gated: true },
-    { id: 'kawaii',   name: 'Kawaii',     icon: '🎀', c1: '#fff0f5', c2: '#ffb6c1',
-      blurb: 'Soft, pink, dangerously cute.' },
-    { id: 'discord',  name: 'Discord',    icon: '🎮', c1: '#313338', c2: '#5865f2',
-      blurb: 'A pixel-perfect impression.' },
-    { id: 'gothic',   name: 'Edgelord',   icon: '🦇', c1: '#050505', c2: '#800000',
-      blurb: 'Deep black. Dripping red.' }
+    { id: 'kawaii',   name: 'Kawaii',     icon: '𖹭', c1: '#fff0f5', c2: '#ffb6c1',
+      blurb: 'Dangerously cute. literally( donʼt tell me i didnʼt warn you)' },
+    { id: 'discord',  name: 'Discord',    icon: '✧', c1: '#313338', c2: '#5865f2',
+      blurb: 'Go touch grass' },
+    { id: 'gothic',   name: 'Edgelord',   icon: '♱', c1: '#050505', c2: '#800000',
+      blurb: 'Damn you are a Edgelord?' }
   ];
 
   var THEME_LOOKUP = {};
