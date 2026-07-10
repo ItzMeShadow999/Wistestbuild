@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>W.I.S. — Widget Image Studio (With Theme Engine)</title>
+    <meta name="description" content="Widget Framer, File Converter and Advanced Image Editor — all in your browser. Now with 5 theme modes." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    
+    <!-- INTEGRATION STEP 1: Replace your old styles.css link with the new theme CSS -->
+    <link rel="stylesheet" href="./styles-themes.css" />
+  </head>
+
+  <body>
+    <div class="app">
+
+      <!-- Your existing header -->
+      <header class="titlebar">
+        <span class="titlebar-brand">W.I.S.</span>
+        <div class="titlebar-sep"></div>
+        <span id="titlebarStatus">Waiting for an image. Pick a theme while you wait! 🎨</span>
+      </header>
+
+      <!-- Your existing tabs -->
+      <nav class="main-tabs" role="tablist" aria-label="Tool panels">
+        <button class="tab-button" role="tab" aria-selected="true" data-tab="framer">Widget Framer</button>
+        <button class="tab-button" role="tab" aria-selected="false" data-tab="converter">File Converter</button>
+        <button class="tab-button" role="tab" aria-selected="false" data-tab="advanced">Advanced Editor</button>
+      </nav>
+
+      <!-- Your existing panels (framer, converter, advanced) -->
+      <section id="framerPanel" role="tabpanel" aria-label="Widget Framer">
+        <section id="dropZone" class="preview-wrap" aria-label="Image preview">
+          <div id="previewEmpty" class="preview-empty">
+            Drop or paste a file here
+            <span class="preview-empty-sub">PNG · JPG · WEBP · GIF — or drag/paste a URL</span>
+          </div>
+        </section>
+        
+        <div class="framer-layout">
+          <div>
+            <div class="section-divider">
+              <span class="section-divider-line"></span>
+              <span class="section-divider-label">Source</span>
+              <span class="section-divider-line"></span>
+            </div>
+            <!-- Your framer inputs here -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Rest of your content... -->
+    </div>
+
+    <!-- Your existing scripts (app.js, color picker, etc.) -->
+    <script src="./app.js"></script>
+
+    <!-- INTEGRATION STEP 2: Add the theme switcher script before closing body -->
+    <script src="./theme-switcher.js"></script>
+  </body>
+</html>
