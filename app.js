@@ -2302,7 +2302,7 @@ document.getElementById('canvasBgTransparent').addEventListener('change', () => 
     { id: 'white',    name: 'PURE White', icon: '⬤', c1: '#ffffff', c2: '#000000',
       blurb: 'Eye-burning. Legally concerning.', gated: true },
     { id: 'kawaii',   name: 'Kawaii',     icon: '𖹭', c1: '#fff0f5', c2: '#ffb6c1',
-      blurb: 'Dangerously cute. literally( donʼt tell me i didnʼt warn you)' },
+      blurb: 'Dangerously cute. You have been warned' },
     { id: 'discord',  name: 'Discord',    icon: '✧', c1: '#313338', c2: '#5865f2',
       blurb: 'Go touch grass' },
     { id: 'gothic',   name: 'Edgelord',   icon: '♱', c1: '#050505', c2: '#800000',
