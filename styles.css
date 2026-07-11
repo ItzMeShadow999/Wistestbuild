@@ -1763,6 +1763,11 @@
   border-radius: 50%;
   border: 1px solid var(--border-hi);
   flex-shrink: 0;
+  /* Was unfilled — the trigger's dot was an empty ring with nothing to
+     show which theme is active. This is meant to be dynamic: it just
+     reads the live --accent var, so it always matches whatever theme
+     is currently applied without needing its own per-theme override. */
+  background: var(--accent);
 }
 
 .theme-popover {
@@ -2223,6 +2228,8 @@
   color: #a06010;
 }
 :root[data-theme="kawaii"] .warn-callout-close { color: #c98226; }
+:root[data-theme="kawaii"] .warn-callout-close:hover { opacity: 1; background: rgba(201,130,38,0.16); }
+:root[data-theme="kawaii"] .warn-callout-close:focus-visible { outline: none; opacity: 1; box-shadow: 0 0 0 2px rgba(201,130,38,0.5); }
 
 /* ── Format chips (tab 1/2) ── */
 :root[data-theme="kawaii"] .format-chip {
@@ -2717,12 +2724,14 @@
   color: #8a3a6e;
 }
 :root[data-theme="kawaii"] .theme-modal-btn--cancel:hover { background: rgba(255,210,230,0.75); }
+:root[data-theme="kawaii"] .theme-modal-btn--cancel:focus-visible { box-shadow: 0 0 0 2px rgba(255,128,176,0.5); }
 :root[data-theme="kawaii"] .theme-modal-btn--confirm {
   border-color: rgba(255,100,160,0.55);
   background: linear-gradient(180deg, rgba(255,128,176,0.4), rgba(255,128,176,0.25));
   color: #5c1f3a;
 }
 :root[data-theme="kawaii"] .theme-modal-btn--confirm:hover { filter: brightness(1.1); }
+:root[data-theme="kawaii"] .theme-modal-btn--confirm:focus-visible { box-shadow: 0 0 0 2px rgba(255,100,160,0.5); }
 
 /* ── Coverage completion: elements the full retheme above missed ── */
 :root[data-theme="kawaii"] .gear-btn { color: #c07ab8; background: rgba(255,150,190,0.08); }
@@ -2879,6 +2888,8 @@
 /* ── Warn callout ── */
 :root[data-theme="discord"] .warn-callout { background: rgba(240,178,50,0.06); border-color: rgba(240,178,50,0.22); color: #dbdee1; }
 :root[data-theme="discord"] .warn-callout-close { color: #6d6f78; }
+:root[data-theme="discord"] .warn-callout-close:hover { opacity: 1; background: rgba(240,178,50,0.16); }
+:root[data-theme="discord"] .warn-callout-close:focus-visible { outline: none; opacity: 1; box-shadow: 0 0 0 2px rgba(240,178,50,0.5); }
 
 /* ── Format chips (framer/converter) ── */
 :root[data-theme="discord"] .format-chip { background: #383a40; border-color: transparent; color: #dbdee1; border-radius: 3px; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; font-size: 13px; font-weight: 500; }
@@ -3047,6 +3058,8 @@
 :root[data-theme="discord"] .gear-btn { color: #5865f2; }
 :root[data-theme="discord"] .gear-btn:hover { background: rgba(88,101,242,0.12); }
 :root[data-theme="discord"] .gear-btn[aria-pressed="true"] { background: rgba(88,101,242,0.18); color: #5865f2; }
+:root[data-theme="discord"] .gear-btn svg path { fill: #5865f2; }
+:root[data-theme="discord"] .gear-btn:hover svg path { fill: #949cf7; }
 
 /* ── Advanced panel ── */
 :root[data-theme="discord"] .advanced-panel { background: #2b2d31; border-color: rgba(0,0,0,0.3); border-radius: 6px; }
@@ -3062,8 +3075,10 @@
 :root[data-theme="discord"] .theme-modal-title { color: #f2f3f5; }
 :root[data-theme="discord"] .theme-modal-btn--cancel { border-color: rgba(255,255,255,0.08); background: #4e5058; color: #dbdee1; }
 :root[data-theme="discord"] .theme-modal-btn--cancel:hover { background: #6d6f78; }
+:root[data-theme="discord"] .theme-modal-btn--cancel:focus-visible { box-shadow: 0 0 0 2px rgba(148,155,164,0.5); }
 :root[data-theme="discord"] .theme-modal-btn--confirm { border-color: rgba(88,101,242,0.5); background: #5865f2; color: #fff; }
 :root[data-theme="discord"] .theme-modal-btn--confirm:hover { filter: brightness(1.1); }
+:root[data-theme="discord"] .theme-modal-btn--confirm:focus-visible { box-shadow: 0 0 0 2px rgba(88,101,242,0.5); }
 :root[data-theme="discord"] .wcp-trigger--open { border-color: #5865f2 !important; box-shadow: 0 0 0 3px rgba(88,101,242,0.25); }
 :root[data-theme="discord"] .wcp-swatch { border-right-color: rgba(0,0,0,0.3); }
 :root[data-theme="discord"] .wcp-gradient { border-color: rgba(0,0,0,0.3); }
@@ -3423,6 +3438,16 @@
 :root[data-theme="gothic"] .warn-callout { background: rgba(204,68,68,0.1); border-color: rgba(204,68,68,0.3); }
 :root[data-theme="gothic"] .warn-callout-close { color: #ffb3b3; }
 :root[data-theme="gothic"] .warn-callout-close:hover { background: rgba(204,68,68,0.2); }
+:root[data-theme="gothic"] .warn-callout-close:focus-visible { outline: none; opacity: 1; box-shadow: 0 0 0 2px rgba(204,68,68,0.5); }
+
+/* ── Format chips (tab 1/2) — was missing entirely, chip fell back to
+   Original's blurple .active state ── */
+:root[data-theme="gothic"] .format-chip.active {
+  background: linear-gradient(135deg, rgba(139,0,0,0.4) 0%, rgba(74,0,0,0.35) 100%);
+  border-color: rgba(180,0,0,0.55);
+  color: #ffb3b3;
+  box-shadow: 0 0 0 1px rgba(139,0,0,0.2);
+}
 
 /* Theme switcher trigger / modal / flashbang */
 :root[data-theme="gothic"] .theme-trigger { border-color: rgba(139,0,0,0.3); background: rgba(20,4,4,0.5); }
@@ -3435,14 +3460,20 @@
 :root[data-theme="gothic"] .theme-modal-body li { color: #b09090; }
 :root[data-theme="gothic"] .theme-modal-btn--cancel { border-color: rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: #e0d0d0; }
 :root[data-theme="gothic"] .theme-modal-btn--cancel:hover { background: rgba(255,255,255,0.09); }
+:root[data-theme="gothic"] .theme-modal-btn--cancel:focus-visible { box-shadow: 0 0 0 2px rgba(204,68,68,0.5); }
 :root[data-theme="gothic"] .theme-modal-btn--confirm { border-color: rgba(200,0,0,0.4); background: linear-gradient(180deg, rgba(180,0,0,0.35), rgba(100,0,0,0.2)); color: #ffd8d8; }
 :root[data-theme="gothic"] .theme-modal-btn--confirm:hover { filter: brightness(1.2); }
+:root[data-theme="gothic"] .theme-modal-btn--confirm:focus-visible { box-shadow: 0 0 0 2px rgba(200,0,0,0.5); }
 
 /* Custom colour picker (WCP) */
 :root[data-theme="gothic"] .wcp-trigger { background: rgba(15,2,2,0.8); border-color: rgba(139,0,0,0.25); }
 :root[data-theme="gothic"] .wcp-trigger:hover { border-color: rgba(200,0,0,0.45); background: rgba(20,4,4,0.9); }
 :root[data-theme="gothic"] .wcp-trigger--open { border-color: rgba(200,0,0,0.6) !important; box-shadow: 0 0 0 3px rgba(139,0,0,0.18); }
 :root[data-theme="gothic"] .wcp-swatch { border-right-color: rgba(139,0,0,0.2); }
+:root[data-theme="gothic"] .wcp-input:focus {
+  border-color: rgba(200,0,0,0.55);
+  box-shadow: 0 0 0 2px rgba(139,0,0,0.2);
+}
 :root[data-theme="gothic"] .wcp-preview-row { border-color: rgba(139,0,0,0.2); }
 :root[data-theme="gothic"] .wcp-preview-after { border-left-color: rgba(139,0,0,0.25); }
 :root[data-theme="gothic"] .wcp-preview-before::after { color: rgba(255,200,200,0); }
@@ -3458,3 +3489,31 @@
 :root[data-theme="gothic"] .wcp-input-label { color: #6a3a3a; }
 :root[data-theme="gothic"] .wcp-preset { border-color: rgba(139,0,0,0.15); }
 :root[data-theme="gothic"] .wcp-preset:hover { border-color: rgba(200,0,0,0.4); box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+
+
+
+
+.theme-popover .theme-option:nth-of-type(1) .theme-option-swatch { background: #5865f2; }
+.theme-popover .theme-option:nth-of-type(1):hover { background: rgba(88,101,242,0.18); }
+.theme-popover .theme-option:nth-of-type(1):focus-visible { border-color: #5865f2; }
+.theme-popover .theme-option:nth-of-type(1).is-active { background: rgba(88,101,242,0.18); border-color: rgba(255,255,255,0.14); }
+
+.theme-popover .theme-option:nth-of-type(2) .theme-option-swatch { background: #000000; }
+.theme-popover .theme-option:nth-of-type(2):hover { background: rgba(0,0,0,0.07); }
+.theme-popover .theme-option:nth-of-type(2):focus-visible { border-color: #595959; }
+.theme-popover .theme-option:nth-of-type(2).is-active { background: rgba(0,0,0,0.07); border-color: rgba(0,0,0,0.32); }
+
+.theme-popover .theme-option:nth-of-type(3) .theme-option-swatch { background: #ff80b0; }
+.theme-popover .theme-option:nth-of-type(3):hover { background: rgba(255,128,176,0.18); }
+.theme-popover .theme-option:nth-of-type(3):focus-visible { border-color: #ff80b0; }
+.theme-popover .theme-option:nth-of-type(3).is-active { background: rgba(255,128,176,0.18); border-color: rgba(255,130,180,0.4); }
+
+.theme-popover .theme-option:nth-of-type(4) .theme-option-swatch { background: #5865f2; }
+.theme-popover .theme-option:nth-of-type(4):hover { background: rgba(88,101,242,0.14); }
+.theme-popover .theme-option:nth-of-type(4):focus-visible { border-color: #5865f2; }
+.theme-popover .theme-option:nth-of-type(4).is-active { background: rgba(88,101,242,0.2); border-color: transparent; }
+
+.theme-popover .theme-option:nth-of-type(5) .theme-option-swatch { background: #800000; box-shadow: 0 0 6px rgba(255,43,43,0.45); }
+.theme-popover .theme-option:nth-of-type(5):hover { background: rgba(139,0,0,0.18); }
+.theme-popover .theme-option:nth-of-type(5):focus-visible { border-color: rgba(200,0,0,0.7); }
+.theme-popover .theme-option:nth-of-type(5).is-active { background: rgba(139,0,0,0.22); border-color: rgba(128,0,0,0.4); }
