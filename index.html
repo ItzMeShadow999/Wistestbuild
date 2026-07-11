@@ -70,6 +70,14 @@
         >
           Advanced Editor
         </button>
+        <button
+          class="tab-button"
+          role="tab"
+          aria-selected="false"
+          data-tab="video"
+        >
+          Video &rarr; GIF
+        </button>
       </nav>
 
       <section id="framerPanel" role="tabpanel" aria-label="Widget Framer">
@@ -1544,12 +1552,211 @@
           </div>
         </div>
       </section>
+
+      <section
+        id="videoPanel"
+        role="tabpanel"
+        aria-label="Video to GIF"
+        hidden
+      >
+        <div class="warn-callout" role="note">
+          <em class="warn-callout-icon">⚠</em>
+          <span
+            >Video&rarr;GIF runs entirely in your browser via FFmpeg-WASM.
+            Nothing is uploaded anywhere. The first conversion downloads a
+            ~25&ndash;30MB engine (cached after that), and longer or
+            higher-resolution clips will take a while and use significant
+            browser memory.</span
+          >
+          <button
+            type="button"
+            class="warn-callout-close"
+            aria-label="Dismiss this notice"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div style="height: 14px"></div>
+        <section
+          id="dropZoneVideo"
+          class="preview-wrap"
+          aria-label="Video preview"
+        >
+          <div id="previewEmptyVideo" class="preview-empty">
+            Drop or browse a video file here
+            <span class="preview-empty-sub">MP4 · MOV · WEBM · MKV</span>
+          </div>
+          <div id="previewLoadingVideo" class="preview-loading" hidden>
+            <div class="spinner" aria-hidden="true"></div>
+            <span id="previewLoadingTextVideo">Loading video engine…</span>
+            <div id="progressWrapVideo" class="progress-wrap" hidden>
+              <div class="progress-track">
+                <div
+                  id="progressBarVideo"
+                  class="progress-bar"
+                  role="progressbar"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  aria-valuenow="0"
+                ></div>
+              </div>
+              <span id="progressLabelVideo" class="progress-label">0%</span>
+            </div>
+          </div>
+          <video
+            id="previewVideoEl"
+            class="preview-image"
+            muted
+            playsinline
+            controls
+            hidden
+          ></video>
+          <img id="previewImageVideo" class="preview-image" alt="" hidden />
+          <div id="previewMetaVideo" class="preview-meta"></div>
+        </section>
+
+        <div style="height: 14px"></div>
+        <div class="section-divider">
+          <span class="section-divider-line"></span
+          ><span class="section-divider-label">Source</span
+          ><span class="section-divider-line"></span>
+        </div>
+        <div class="conv-source">
+          <div class="conv-source-row">
+            <input
+              id="inputPathVideo"
+              class="input"
+              type="text"
+              readonly
+              placeholder="Choose a video — MP4, MOV, WEBM, MKV…"
+            />
+            <button id="browseButtonVideo" class="btn" type="button">
+              Browse
+            </button>
+          </div>
+        </div>
+
+        <div style="height: 10px"></div>
+        <div class="section-divider">
+          <span class="section-divider-line"></span
+          ><span class="section-divider-label">Trim &amp; frame rate</span
+          ><span class="section-divider-line"></span>
+        </div>
+        <div class="conv-controls">
+          <div class="field">
+            <label class="field-label" for="trimStartVideo">Start (s)</label>
+            <input
+              id="trimStartVideo"
+              class="input"
+              type="number"
+              min="0"
+              step="0.1"
+              placeholder="0"
+            />
+          </div>
+          <div class="field">
+            <label class="field-label" for="trimDurationVideo"
+              >Duration (s)</label
+            >
+            <input
+              id="trimDurationVideo"
+              class="input"
+              type="number"
+              min="0"
+              step="0.1"
+              placeholder="Full clip"
+            />
+          </div>
+          <div class="field">
+            <label class="field-label" for="fpsVideo">Frame rate</label>
+            <input
+              id="fpsVideo"
+              class="input"
+              type="number"
+              min="1"
+              max="50"
+              placeholder="12"
+            />
+          </div>
+          <div class="field">
+            <label class="field-label" for="widthVideo">Width (px)</label>
+            <input
+              id="widthVideo"
+              class="input"
+              type="number"
+              min="16"
+              placeholder="480"
+            />
+          </div>
+        </div>
+
+        <div style="height: 10px"></div>
+        <div class="section-divider">
+          <span class="section-divider-line"></span
+          ><span class="section-divider-label">Output</span
+          ><span class="section-divider-line"></span>
+        </div>
+        <div class="conv-controls">
+          <div class="conv-output-block">
+            <div class="field-label">Filename</div>
+            <div class="conv-output-inner">
+              <input
+                id="outputNameVideo"
+                class="input"
+                type="text"
+                placeholder="output.gif"
+              />
+            </div>
+          </div>
+
+          <label class="advanced-item" for="paletteVideo" style="min-width: 0">
+            <span class="advanced-label">Two-pass palette (best quality)</span>
+            <div class="toggle-switch">
+              <input id="paletteVideo" type="checkbox" checked />
+              <span class="toggle-slider"></span>
+            </div>
+          </label>
+
+          <div class="conv-actions">
+            <button
+              id="downloadButtonVideo"
+              class="btn"
+              type="button"
+              disabled
+            >
+              Download
+            </button>
+            <button
+              id="convertButtonVideo"
+              class="btn btn-primary"
+              type="button"
+              disabled
+            >
+              Convert to GIF
+            </button>
+          </div>
+        </div>
+
+        <div
+          id="statusVideo"
+          class="status-bar"
+          aria-live="polite"
+          style="margin-top: 8px"
+        ></div>
+      </section>
     </div>
 
     <input
       id="localFileInput"
       type="file"
       accept=".png,.jpg,.jpeg,.webp,.gif"
+      hidden
+    />
+    <input
+      id="localFileInputVideo"
+      type="file"
+      accept="video/*,.mp4,.mov,.webm,.mkv,.avi"
       hidden
     />
     <input id="localFileInputConv" type="file" accept="image/*" hidden />
