@@ -427,6 +427,134 @@ async function fetchImageAsFile(rawUrl) {
   return new File([blob], fileName, { type: contentType || "image/png" });
 }
 
+function mediaFileNameFromUrl(url, contentType) {
+  let pathname = "download";
+  try {
+    pathname = new URL(url).pathname.split("/").pop() || "download";
+  } catch {
+    
+  }
+  pathname = decodeURIComponent(pathname).split(/[?#]/)[0] || "download";
+
+  if (/\.(mp4|gif|webm|mov|m4v)$/i.test(pathname)) {
+    return pathname;
+  }
+
+  const subtype = (contentType || "").split("/")[1]?.split(/[+;]/)[0]?.toLowerCase();
+  const extension = subtype === "quicktime" ? "mov" : (subtype || "mp4");
+  const stem = pathname.replace(/\.[^.]+$/, "") || "download";
+  return `${stem}.${extension}`;
+}
+
+async function fetchMediaAsFile(rawUrl, { acceptTypes } = {}) {
+  const types = acceptTypes ?? ["video/mp4", "image/gif"];
+
+  let url;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new Error("That doesn't look like a valid URL.");
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("Only http(s) URLs are supported.");
+  }
+
+  let response;
+  try {
+    response = await fetch(url.href, { mode: "cors", referrerPolicy: "no-referrer" });
+  } catch {
+    const error = new Error("Could not fetch that URL — the host may block cross-origin requests.");
+    error.corsLikely = true;
+    throw error;
+  }
+  if (!response.ok) {
+    throw new Error(`Server responded with ${response.status}.`);
+  }
+
+  const blob = await response.blob();
+  const contentType = blob.type || response.headers.get("content-type") || "";
+  if (types.length && !types.some((t) => contentType.startsWith(t))) {
+    throw new Error("That URL doesn't point to an mp4 or gif file.");
+  }
+
+  const fileName = mediaFileNameFromUrl(url.href, contentType);
+  return new File([blob], fileName, { type: contentType });
+}
+
+function saveFileToDisk(file) {
+  const objectUrl = URL.createObjectURL(file);
+  const a = document.createElement("a");
+  a.href = objectUrl;
+  a.download = file.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+function wireMediaDownloader({ urlInput, downloadButton, statusEl, spinnerEl, fallbackWrap, fallbackTextEl }) {
+  function setStatus(message, tone = "neutral") {
+    statusEl.textContent = message;
+    statusEl.dataset.tone = tone;
+  }
+
+  function setBusy(busy) {
+    downloadButton.disabled = busy;
+    spinnerEl.hidden = !busy;
+  }
+
+  function showFallback(url) {
+    fallbackWrap.hidden = false;
+    const body = fallbackWrap.querySelector("#mediaDownloadFallbackBody") ?? fallbackWrap;
+    body.querySelectorAll("a").forEach((el) => el.remove());
+    const link = document.createElement("a");
+    link.href = url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = "Open file directly (right-click → Save As)";
+    link.className = "gif-note-link";
+    body.appendChild(link);
+  }
+
+  function hideFallback() {
+    fallbackWrap.hidden = true;
+  }
+
+  async function runDownload() {
+    const trimmed = (urlInput.value || "").trim();
+    if (!trimmed) {
+      setStatus("Paste a direct .mp4 or .gif link first.", "error");
+      return;
+    }
+
+    hideFallback();
+    setBusy(true);
+    setStatus("Fetching file…", "neutral");
+
+    try {
+      const file = await fetchMediaAsFile(trimmed);
+      saveFileToDisk(file);
+      setStatus(`Downloaded ${file.name}.`, "success");
+      urlInput.value = "";
+    } catch (error) {
+      setStatus(String(error?.message ?? error), "error");
+      if (error?.corsLikely) {
+        showFallback(trimmed);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  downloadButton.addEventListener("click", runDownload);
+  urlInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      runDownload();
+    }
+  });
+}
+
 function getSuggestedOutputName(fileName, extension) {
   const cleanName = fileName.split(/[/\\]/).pop() ?? "image";
   const stem = cleanName.replace(/\.[^.]+$/, "") || "image";
@@ -474,82 +602,6 @@ async function loadModernGif() {
     return await modernGifPromise;
   } catch (error) {
     modernGifPromise = null;
-    throw error;
-  }
-}
-
-
-
-/* ── FFmpeg-WASM: client-side video → GIF ──────────────────────
-   Same lazy-singleton-promise pattern as loadModernGif() above.
-   Nothing is ever uploaded — the wasm core (JS wrapper + the
-   actual ~25-30MB compiled FFmpeg binary) is fetched from a CDN
-   the first time a video conversion is requested, then cached
-   for the rest of the session. */
-let ffmpegInstancePromise = null;
-
-async function loadFfmpeg(onLog) {
-  if (ffmpegInstancePromise) return ffmpegInstancePromise;
-
-  ffmpegInstancePromise = (async () => {
-    const wrapperSources = [
-      "https://esm.sh/@ffmpeg/ffmpeg@0.12.10",
-      "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/+esm",
-    ];
-    const utilSources = [
-      "https://esm.sh/@ffmpeg/util@0.12.1",
-      "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/+esm",
-    ];
-    const coreBaseSources = [
-      "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm",
-      "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm",
-    ];
-
-    async function importFirst(sources, label) {
-      let lastError = null;
-      for (const source of sources) {
-        try {
-          const module = await import(source);
-          return module;
-        } catch (error) {
-          lastError = error;
-        }
-      }
-      throw lastError ?? new Error(`Could not load ${label} from any source.`);
-    }
-
-    const { FFmpeg } = await importFirst(wrapperSources, "the FFmpeg engine");
-    const { toBlobURL } = await importFirst(utilSources, "FFmpeg utilities");
-
-    const ffmpeg = new FFmpeg();
-    if (onLog) {
-      ffmpeg.on("log", ({ message }) => onLog(message));
-    }
-
-    let lastCoreError = null;
-    let loaded = false;
-    for (const coreBase of coreBaseSources) {
-      try {
-        const coreURL = await toBlobURL(`${coreBase}/ffmpeg-core.js`, "text/javascript");
-        const wasmURL = await toBlobURL(`${coreBase}/ffmpeg-core.wasm`, "application/wasm");
-        await ffmpeg.load({ coreURL, wasmURL });
-        loaded = true;
-        break;
-      } catch (error) {
-        lastCoreError = error;
-      }
-    }
-    if (!loaded) {
-      throw lastCoreError ?? new Error("Could not load the FFmpeg engine core from any source.");
-    }
-
-    return ffmpeg;
-  })();
-
-  try {
-    return await ffmpegInstancePromise;
-  } catch (error) {
-    ffmpegInstancePromise = null;
     throw error;
   }
 }
@@ -718,7 +770,6 @@ const panels = {
   framer: document.querySelector("#framerPanel"),
   converter: document.querySelector("#converterPanel"),
   advanced: document.querySelector("#advancedEditorPanel"),
-  video: document.querySelector("#videoPanel"),
 };
 
 tabButtons.forEach((button) => {
@@ -1350,6 +1401,15 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     onFile: handleSelectedFile,
   });
 
+  wireMediaDownloader({
+    urlInput: document.querySelector("#mediaUrlInput"),
+    downloadButton: document.querySelector("#mediaDownloadButton"),
+    statusEl: document.querySelector("#mediaDownloadStatus"),
+    spinnerEl: document.querySelector("#mediaDownloadSpinner"),
+    fallbackWrap: document.querySelector("#mediaDownloadFallback"),
+    fallbackTextEl: document.querySelector("#mediaDownloadFallbackText"),
+  });
+
   async function encodeAs(canvas, format, quality) {
     const info = FORMATS[format];
 
@@ -1465,249 +1525,6 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
   downloadButton.addEventListener("click", () => {
     if (!lastResult) {
       ui.setStatus("Convert a file before downloading it.", "error");
-      return;
-    }
-    const defaultName = outputName.value.trim() || lastResult.outputName;
-    const link = document.createElement("a");
-    link.href = lastResult.previewUrl;
-    link.download = defaultName;
-    link.click();
-  });
-
-  window.addEventListener("beforeunload", () => {
-    clearObjectUrl(selectedInputUrl);
-    clearObjectUrl(outputUrl);
-  });
-
-  ui.clearPreview();
-  ui.setStatus("", "neutral");
-})();
-
-
-
-(function videoToGif() {
-  const refs = {
-    dropZone: document.querySelector("#dropZoneVideo"),
-    previewEmpty: document.querySelector("#previewEmptyVideo"),
-    previewLoading: document.querySelector("#previewLoadingVideo"),
-    previewLoadingText: document.querySelector("#previewLoadingTextVideo"),
-    progressWrap: document.querySelector("#progressWrapVideo"),
-    progressBar: document.querySelector("#progressBarVideo"),
-    progressLabel: document.querySelector("#progressLabelVideo"),
-    previewImage: document.querySelector("#previewImageVideo"),
-    previewMeta: document.querySelector("#previewMetaVideo"),
-    status: document.querySelector("#statusVideo"),
-  };
-
-  const previewVideoEl = document.querySelector("#previewVideoEl");
-  const inputPath = document.querySelector("#inputPathVideo");
-  const outputName = document.querySelector("#outputNameVideo");
-  const browseButton = document.querySelector("#browseButtonVideo");
-  const convertButton = document.querySelector("#convertButtonVideo");
-  const downloadButton = document.querySelector("#downloadButtonVideo");
-  const localFileInput = document.querySelector("#localFileInputVideo");
-  const trimStart = document.querySelector("#trimStartVideo");
-  const trimDuration = document.querySelector("#trimDurationVideo");
-  const fpsInput = document.querySelector("#fpsVideo");
-  const widthInput = document.querySelector("#widthVideo");
-  const paletteToggle = document.querySelector("#paletteVideo");
-
-  if (!refs.dropZone) return; // panel not present on this page
-
-  const ui = createPanelUI(refs);
-
-  let selectedFile = null;
-  let selectedInputUrl = "";
-  let outputUrl = "";
-  let lastResult = null;
-
-  function resetResultState() {
-    lastResult = null;
-    downloadButton.disabled = true;
-  }
-
-  function showVideoPreview(url) {
-    refs.previewImage.hidden = true;
-    refs.previewImage.removeAttribute("src");
-    previewVideoEl.src = url;
-    previewVideoEl.hidden = false;
-    refs.previewEmpty.hidden = true;
-  }
-
-  function showGifPreview(url) {
-    previewVideoEl.hidden = true;
-    previewVideoEl.removeAttribute("src");
-    ui.setPreview(url, "Converted GIF output");
-  }
-
-  async function handleSelectedFile(file) {
-    if (!file) return;
-    if (!/^video\//.test(file.type) && !/\.(mp4|mov|webm|mkv|avi|m4v)$/i.test(file.name)) {
-      ui.setStatus("That doesn't look like a video file.", "error");
-      return;
-    }
-
-    selectedFile = file;
-    clearObjectUrl(selectedInputUrl);
-    selectedInputUrl = URL.createObjectURL(file);
-
-    inputPath.value = file.name;
-    outputName.value = replaceExtension(file.name, "gif");
-    resetResultState();
-    convertButton.disabled = false;
-
-    ui.baseMeta = "Previewing selected video.";
-    ui.setPreviewLoading(false);
-    showVideoPreview(selectedInputUrl);
-    ui.setPreviewMeta(ui.baseMeta);
-    ui.setStatus("", "neutral");
-  }
-
-  browseButton.addEventListener("click", () => {
-    localFileInput.value = "";
-    localFileInput.onchange = () => {
-      const file = localFileInput.files?.[0] ?? null;
-      if (file) handleSelectedFile(file);
-    };
-    localFileInput.click();
-  });
-
-  ["dragenter", "dragover"].forEach((eventName) => {
-    refs.dropZone.addEventListener(eventName, (event) => {
-      event.preventDefault();
-      refs.dropZone.classList.add("drag-over");
-    });
-  });
-  ["dragleave", "drop"].forEach((eventName) => {
-    refs.dropZone.addEventListener(eventName, (event) => {
-      event.preventDefault();
-      refs.dropZone.classList.remove("drag-over");
-    });
-  });
-  refs.dropZone.addEventListener("drop", (event) => {
-    const file = event.dataTransfer?.files?.[0];
-    if (file) handleSelectedFile(file);
-  });
-
-  function buildFfmpegArgs({ fps, width, start, duration }) {
-    const trimArgs = [];
-    if (start > 0) trimArgs.push("-ss", String(start));
-    if (duration > 0) trimArgs.push("-t", String(duration));
-    const scaleExpr = `scale=${width}:-1:flags=lanczos`;
-    return { trimArgs, scaleExpr };
-  }
-
-  async function runVideoToGif(file, opts) {
-    const { fps, width, start, duration, usePalette } = opts;
-
-    ui.setPreviewLoading(true, "Loading video engine (first run only)…");
-    ui.setProgressState(true, 2, "Loading video engine (2%)");
-
-    const ffmpeg = await loadFfmpeg();
-
-    ffmpeg.off?.("progress");
-    ffmpeg.on("progress", ({ progress }) => {
-      const pct = Math.max(5, Math.min(95, Math.round(progress * 90) + 5));
-      ui.setProgressState(true, pct, `Converting video (${pct}%)`);
-    });
-
-    ui.setPreviewLoading(true, "Reading video file…");
-    ui.setProgressState(true, 8, "Reading video file (8%)");
-
-    const inputBytes = await fetchFileBytes(file);
-    await ffmpeg.writeFile("input.mp4", inputBytes);
-
-    const { trimArgs, scaleExpr } = buildFfmpegArgs({ fps, width, start, duration });
-
-    try {
-      if (usePalette) {
-        // Two-pass palette generation: much better GIF color quality
-        // than a naive single-pass encode.
-        ui.setPreviewLoading(true, "Generating color palette…");
-        await ffmpeg.exec([
-          ...trimArgs,
-          "-i", "input.mp4",
-          "-vf", `fps=${fps},${scaleExpr},palettegen=stats_mode=diff`,
-          "-y", "palette.png",
-        ]);
-
-        ui.setPreviewLoading(true, "Encoding GIF…");
-        await ffmpeg.exec([
-          ...trimArgs,
-          "-i", "input.mp4",
-          "-i", "palette.png",
-          "-lavfi", `fps=${fps},${scaleExpr}[x];[x][1:v]paletteuse=dither=bayer`,
-          "-y", "output.gif",
-        ]);
-      } else {
-        ui.setPreviewLoading(true, "Encoding GIF…");
-        await ffmpeg.exec([
-          ...trimArgs,
-          "-i", "input.mp4",
-          "-vf", `fps=${fps},${scaleExpr}`,
-          "-y", "output.gif",
-        ]);
-      }
-
-      const data = await ffmpeg.readFile("output.gif");
-      return new Blob([data.buffer], { type: "image/gif" });
-    } finally {
-      // Clean up the virtual filesystem so repeated conversions in
-      // one session don't leak memory.
-      for (const name of ["input.mp4", "palette.png", "output.gif"]) {
-        try { await ffmpeg.deleteFile(name); } catch (_) { /* may not exist */ }
-      }
-    }
-  }
-
-  async function fetchFileBytes(file) {
-    const buf = await file.arrayBuffer();
-    return new Uint8Array(buf);
-  }
-
-  convertButton.addEventListener("click", async () => {
-    if (!selectedFile) {
-      ui.setStatus("Choose a video file first.", "error");
-      return;
-    }
-
-    convertButton.disabled = true;
-    downloadButton.disabled = true;
-    ui.setStatus("", "neutral");
-
-    const fps = Math.max(1, Math.min(50, Number(fpsInput.value) || 12));
-    const width = Math.max(16, Number(widthInput.value) || 480);
-    const start = Math.max(0, Number(trimStart.value) || 0);
-    const duration = Math.max(0, Number(trimDuration.value) || 0);
-    const usePalette = paletteToggle.checked;
-
-    try {
-      const blob = await runVideoToGif(selectedFile, { fps, width, start, duration, usePalette });
-
-      clearObjectUrl(outputUrl);
-      outputUrl = URL.createObjectURL(blob);
-      ui.setProgressState(true, 100, "Done (100%)");
-
-      const finalName = outputName.value.trim() || replaceExtension(selectedFile.name, "gif");
-      lastResult = { outputName: finalName, previewUrl: outputUrl };
-      downloadButton.disabled = false;
-
-      ui.baseMeta = `Converted to GIF (${fps}fps, ${width}px wide).`;
-      showGifPreview(outputUrl);
-      ui.setPreviewMeta(ui.baseMeta);
-      ui.setStatus("", "success");
-    } catch (error) {
-      ui.setPreviewLoading(false);
-      ui.setProgressState(false, 0, "");
-      ui.setStatus(String(error?.message ?? error), "error");
-    } finally {
-      convertButton.disabled = false;
-    }
-  });
-
-  downloadButton.addEventListener("click", () => {
-    if (!lastResult) {
-      ui.setStatus("Convert a video before downloading it.", "error");
       return;
     }
     const defaultName = outputName.value.trim() || lastResult.outputName;
