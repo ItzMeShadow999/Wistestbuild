@@ -480,6 +480,82 @@ async function loadModernGif() {
 
 
 
+/* ── FFmpeg-WASM: client-side video → GIF ──────────────────────
+   Same lazy-singleton-promise pattern as loadModernGif() above.
+   Nothing is ever uploaded — the wasm core (JS wrapper + the
+   actual ~25-30MB compiled FFmpeg binary) is fetched from a CDN
+   the first time a video conversion is requested, then cached
+   for the rest of the session. */
+let ffmpegInstancePromise = null;
+
+async function loadFfmpeg(onLog) {
+  if (ffmpegInstancePromise) return ffmpegInstancePromise;
+
+  ffmpegInstancePromise = (async () => {
+    const wrapperSources = [
+      "https://esm.sh/@ffmpeg/ffmpeg@0.12.10",
+      "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/+esm",
+    ];
+    const utilSources = [
+      "https://esm.sh/@ffmpeg/util@0.12.1",
+      "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/+esm",
+    ];
+    const coreBaseSources = [
+      "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm",
+      "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm",
+    ];
+
+    async function importFirst(sources, label) {
+      let lastError = null;
+      for (const source of sources) {
+        try {
+          const module = await import(source);
+          return module;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError ?? new Error(`Could not load ${label} from any source.`);
+    }
+
+    const { FFmpeg } = await importFirst(wrapperSources, "the FFmpeg engine");
+    const { toBlobURL } = await importFirst(utilSources, "FFmpeg utilities");
+
+    const ffmpeg = new FFmpeg();
+    if (onLog) {
+      ffmpeg.on("log", ({ message }) => onLog(message));
+    }
+
+    let lastCoreError = null;
+    let loaded = false;
+    for (const coreBase of coreBaseSources) {
+      try {
+        const coreURL = await toBlobURL(`${coreBase}/ffmpeg-core.js`, "text/javascript");
+        const wasmURL = await toBlobURL(`${coreBase}/ffmpeg-core.wasm`, "application/wasm");
+        await ffmpeg.load({ coreURL, wasmURL });
+        loaded = true;
+        break;
+      } catch (error) {
+        lastCoreError = error;
+      }
+    }
+    if (!loaded) {
+      throw lastCoreError ?? new Error("Could not load the FFmpeg engine core from any source.");
+    }
+
+    return ffmpeg;
+  })();
+
+  try {
+    return await ffmpegInstancePromise;
+  } catch (error) {
+    ffmpegInstancePromise = null;
+    throw error;
+  }
+}
+
+
+
 function createPanelUI(refs) {
   function setPreviewLoading(loading, message = "Loading preview...") {
     refs.previewLoading.hidden = !loading;
@@ -642,6 +718,7 @@ const panels = {
   framer: document.querySelector("#framerPanel"),
   converter: document.querySelector("#converterPanel"),
   advanced: document.querySelector("#advancedEditorPanel"),
+  video: document.querySelector("#videoPanel"),
 };
 
 tabButtons.forEach((button) => {
@@ -1388,6 +1465,249 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
   downloadButton.addEventListener("click", () => {
     if (!lastResult) {
       ui.setStatus("Convert a file before downloading it.", "error");
+      return;
+    }
+    const defaultName = outputName.value.trim() || lastResult.outputName;
+    const link = document.createElement("a");
+    link.href = lastResult.previewUrl;
+    link.download = defaultName;
+    link.click();
+  });
+
+  window.addEventListener("beforeunload", () => {
+    clearObjectUrl(selectedInputUrl);
+    clearObjectUrl(outputUrl);
+  });
+
+  ui.clearPreview();
+  ui.setStatus("", "neutral");
+})();
+
+
+
+(function videoToGif() {
+  const refs = {
+    dropZone: document.querySelector("#dropZoneVideo"),
+    previewEmpty: document.querySelector("#previewEmptyVideo"),
+    previewLoading: document.querySelector("#previewLoadingVideo"),
+    previewLoadingText: document.querySelector("#previewLoadingTextVideo"),
+    progressWrap: document.querySelector("#progressWrapVideo"),
+    progressBar: document.querySelector("#progressBarVideo"),
+    progressLabel: document.querySelector("#progressLabelVideo"),
+    previewImage: document.querySelector("#previewImageVideo"),
+    previewMeta: document.querySelector("#previewMetaVideo"),
+    status: document.querySelector("#statusVideo"),
+  };
+
+  const previewVideoEl = document.querySelector("#previewVideoEl");
+  const inputPath = document.querySelector("#inputPathVideo");
+  const outputName = document.querySelector("#outputNameVideo");
+  const browseButton = document.querySelector("#browseButtonVideo");
+  const convertButton = document.querySelector("#convertButtonVideo");
+  const downloadButton = document.querySelector("#downloadButtonVideo");
+  const localFileInput = document.querySelector("#localFileInputVideo");
+  const trimStart = document.querySelector("#trimStartVideo");
+  const trimDuration = document.querySelector("#trimDurationVideo");
+  const fpsInput = document.querySelector("#fpsVideo");
+  const widthInput = document.querySelector("#widthVideo");
+  const paletteToggle = document.querySelector("#paletteVideo");
+
+  if (!refs.dropZone) return; // panel not present on this page
+
+  const ui = createPanelUI(refs);
+
+  let selectedFile = null;
+  let selectedInputUrl = "";
+  let outputUrl = "";
+  let lastResult = null;
+
+  function resetResultState() {
+    lastResult = null;
+    downloadButton.disabled = true;
+  }
+
+  function showVideoPreview(url) {
+    refs.previewImage.hidden = true;
+    refs.previewImage.removeAttribute("src");
+    previewVideoEl.src = url;
+    previewVideoEl.hidden = false;
+    refs.previewEmpty.hidden = true;
+  }
+
+  function showGifPreview(url) {
+    previewVideoEl.hidden = true;
+    previewVideoEl.removeAttribute("src");
+    ui.setPreview(url, "Converted GIF output");
+  }
+
+  async function handleSelectedFile(file) {
+    if (!file) return;
+    if (!/^video\//.test(file.type) && !/\.(mp4|mov|webm|mkv|avi|m4v)$/i.test(file.name)) {
+      ui.setStatus("That doesn't look like a video file.", "error");
+      return;
+    }
+
+    selectedFile = file;
+    clearObjectUrl(selectedInputUrl);
+    selectedInputUrl = URL.createObjectURL(file);
+
+    inputPath.value = file.name;
+    outputName.value = replaceExtension(file.name, "gif");
+    resetResultState();
+    convertButton.disabled = false;
+
+    ui.baseMeta = "Previewing selected video.";
+    ui.setPreviewLoading(false);
+    showVideoPreview(selectedInputUrl);
+    ui.setPreviewMeta(ui.baseMeta);
+    ui.setStatus("", "neutral");
+  }
+
+  browseButton.addEventListener("click", () => {
+    localFileInput.value = "";
+    localFileInput.onchange = () => {
+      const file = localFileInput.files?.[0] ?? null;
+      if (file) handleSelectedFile(file);
+    };
+    localFileInput.click();
+  });
+
+  ["dragenter", "dragover"].forEach((eventName) => {
+    refs.dropZone.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      refs.dropZone.classList.add("drag-over");
+    });
+  });
+  ["dragleave", "drop"].forEach((eventName) => {
+    refs.dropZone.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      refs.dropZone.classList.remove("drag-over");
+    });
+  });
+  refs.dropZone.addEventListener("drop", (event) => {
+    const file = event.dataTransfer?.files?.[0];
+    if (file) handleSelectedFile(file);
+  });
+
+  function buildFfmpegArgs({ fps, width, start, duration }) {
+    const trimArgs = [];
+    if (start > 0) trimArgs.push("-ss", String(start));
+    if (duration > 0) trimArgs.push("-t", String(duration));
+    const scaleExpr = `scale=${width}:-1:flags=lanczos`;
+    return { trimArgs, scaleExpr };
+  }
+
+  async function runVideoToGif(file, opts) {
+    const { fps, width, start, duration, usePalette } = opts;
+
+    ui.setPreviewLoading(true, "Loading video engine (first run only)…");
+    ui.setProgressState(true, 2, "Loading video engine (2%)");
+
+    const ffmpeg = await loadFfmpeg();
+
+    ffmpeg.off?.("progress");
+    ffmpeg.on("progress", ({ progress }) => {
+      const pct = Math.max(5, Math.min(95, Math.round(progress * 90) + 5));
+      ui.setProgressState(true, pct, `Converting video (${pct}%)`);
+    });
+
+    ui.setPreviewLoading(true, "Reading video file…");
+    ui.setProgressState(true, 8, "Reading video file (8%)");
+
+    const inputBytes = await fetchFileBytes(file);
+    await ffmpeg.writeFile("input.mp4", inputBytes);
+
+    const { trimArgs, scaleExpr } = buildFfmpegArgs({ fps, width, start, duration });
+
+    try {
+      if (usePalette) {
+        // Two-pass palette generation: much better GIF color quality
+        // than a naive single-pass encode.
+        ui.setPreviewLoading(true, "Generating color palette…");
+        await ffmpeg.exec([
+          ...trimArgs,
+          "-i", "input.mp4",
+          "-vf", `fps=${fps},${scaleExpr},palettegen=stats_mode=diff`,
+          "-y", "palette.png",
+        ]);
+
+        ui.setPreviewLoading(true, "Encoding GIF…");
+        await ffmpeg.exec([
+          ...trimArgs,
+          "-i", "input.mp4",
+          "-i", "palette.png",
+          "-lavfi", `fps=${fps},${scaleExpr}[x];[x][1:v]paletteuse=dither=bayer`,
+          "-y", "output.gif",
+        ]);
+      } else {
+        ui.setPreviewLoading(true, "Encoding GIF…");
+        await ffmpeg.exec([
+          ...trimArgs,
+          "-i", "input.mp4",
+          "-vf", `fps=${fps},${scaleExpr}`,
+          "-y", "output.gif",
+        ]);
+      }
+
+      const data = await ffmpeg.readFile("output.gif");
+      return new Blob([data.buffer], { type: "image/gif" });
+    } finally {
+      // Clean up the virtual filesystem so repeated conversions in
+      // one session don't leak memory.
+      for (const name of ["input.mp4", "palette.png", "output.gif"]) {
+        try { await ffmpeg.deleteFile(name); } catch (_) { /* may not exist */ }
+      }
+    }
+  }
+
+  async function fetchFileBytes(file) {
+    const buf = await file.arrayBuffer();
+    return new Uint8Array(buf);
+  }
+
+  convertButton.addEventListener("click", async () => {
+    if (!selectedFile) {
+      ui.setStatus("Choose a video file first.", "error");
+      return;
+    }
+
+    convertButton.disabled = true;
+    downloadButton.disabled = true;
+    ui.setStatus("", "neutral");
+
+    const fps = Math.max(1, Math.min(50, Number(fpsInput.value) || 12));
+    const width = Math.max(16, Number(widthInput.value) || 480);
+    const start = Math.max(0, Number(trimStart.value) || 0);
+    const duration = Math.max(0, Number(trimDuration.value) || 0);
+    const usePalette = paletteToggle.checked;
+
+    try {
+      const blob = await runVideoToGif(selectedFile, { fps, width, start, duration, usePalette });
+
+      clearObjectUrl(outputUrl);
+      outputUrl = URL.createObjectURL(blob);
+      ui.setProgressState(true, 100, "Done (100%)");
+
+      const finalName = outputName.value.trim() || replaceExtension(selectedFile.name, "gif");
+      lastResult = { outputName: finalName, previewUrl: outputUrl };
+      downloadButton.disabled = false;
+
+      ui.baseMeta = `Converted to GIF (${fps}fps, ${width}px wide).`;
+      showGifPreview(outputUrl);
+      ui.setPreviewMeta(ui.baseMeta);
+      ui.setStatus("", "success");
+    } catch (error) {
+      ui.setPreviewLoading(false);
+      ui.setProgressState(false, 0, "");
+      ui.setStatus(String(error?.message ?? error), "error");
+    } finally {
+      convertButton.disabled = false;
+    }
+  });
+
+  downloadButton.addEventListener("click", () => {
+    if (!lastResult) {
+      ui.setStatus("Convert a video before downloading it.", "error");
       return;
     }
     const defaultName = outputName.value.trim() || lastResult.outputName;
