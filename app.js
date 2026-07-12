@@ -803,6 +803,42 @@ async function runFFmpegVideo(file, format, quality, onProgress) {
 
 
 
+// Lazy-loaded zip encoder, mirroring loadModernGif()/loadFFmpeg(): loaded on first
+// use from a CDN, cached in-memory afterward. Used for "animated GIF -> every frame"
+// exports, where the result is a folder of images rather than a single file.
+let zipLibPromise = null;
+
+async function loadZipLib() {
+  if (zipLibPromise) return zipLibPromise;
+
+  zipLibPromise = (async () => {
+    const sources = ["https://esm.sh/fflate@0.8.2", "https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm"];
+
+    let lastError = null;
+    for (const source of sources) {
+      try {
+        const module = await import(source);
+        if (module?.zipSync) {
+          return module;
+        }
+        lastError = new Error(`Loaded ${source} but it did not expose the expected zip API.`);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError ?? new Error("Could not load the zip engine from any source.");
+  })();
+
+  try {
+    return await zipLibPromise;
+  } catch (error) {
+    zipLibPromise = null;
+    throw error;
+  }
+}
+
+
+
 function createPanelUI(refs) {
   const hasVideoPreview = !!refs.previewVideo;
 
@@ -1545,6 +1581,8 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
   const qualitySlider = document.querySelector("#qualityConv");
   const qualityValue = document.querySelector("#qualityValueConv");
   const gifNote = document.querySelector("#gifSourceNoteConv");
+  const gifAllFramesNote = document.querySelector("#gifAllFramesNoteConv");
+  const gifAllFramesCount = document.querySelector("#gifAllFramesCountConv");
   const videoNote = document.querySelector("#videoSourceNoteConv");
   const browseButton = document.querySelector("#browseButtonConv");
   const convertButton = document.querySelector("#convertButtonConv");
@@ -1559,7 +1597,12 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
   let selectedFile = null;
   let selectedInputUrl = "";
   let outputUrl = "";
+  let previewFrameUrl = "";
   let lastResult = null;
+  // Cached frame count for the currently-selected GIF (null = not a GIF / not decoded yet).
+  let gifFrameCount = null;
+  // { file, frames } cache so the zip-export path can reuse the decode from handleSelectedFile.
+  let cachedGifFrames = null;
 
   
   
@@ -1580,8 +1623,31 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     qualityRow.hidden = !lossy;
   }
 
+  function isStaticImageFormat(format) {
+    return FORMATS[format]?.kind !== "video" && format !== "gif";
+  }
+
+  function isAnimatedGifSource() {
+    return !!(selectedFile && !isVideoFile(selectedFile) && isGifInput(selectedFile.name) && gifFrameCount > 1);
+  }
+
   function updateGifNoteVisibility() {
-    gifNote.hidden = !(selectedFile && !isVideoFile(selectedFile) && isGifInput(selectedFile.name));
+    // Once a GIF is known to be animated and the output is a static image format,
+    // gifAllFramesNote takes over — this note is only for the "single frame kept" case
+    // (non-animated GIF source, or animated GIF -> static GIF).
+    const isGifSource = !!(selectedFile && !isVideoFile(selectedFile) && isGifInput(selectedFile.name));
+    gifNote.hidden = !(isGifSource && !(isAnimatedGifSource() && isStaticImageFormat(outputFormat.value)));
+  }
+
+  function updateAllFramesNoteVisibility() {
+    const show = isAnimatedGifSource() && isStaticImageFormat(outputFormat.value);
+    gifAllFramesNote.hidden = !show;
+    if (show) gifAllFramesCount.textContent = String(gifFrameCount);
+  }
+
+  function updateGifNotes() {
+    updateGifNoteVisibility();
+    updateAllFramesNoteVisibility();
   }
 
   function updateVideoNoteVisibility() {
@@ -1609,6 +1675,7 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
 
   outputFormat.addEventListener("change", () => {
     updateQualityVisibility();
+    updateGifNotes();
     if (inputPath.value.trim() && outputName.value.trim()) {
       outputName.value = replaceExtension(outputName.value.trim(), FORMATS[outputFormat.value].ext);
     }
@@ -1628,12 +1695,14 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     selectedInputUrl = URL.createObjectURL(file);
 
     const isVideo = isVideoFile(file);
+    gifFrameCount = null;
+    cachedGifFrames = null;
 
     inputPath.value = file.name;
     updateFormatGroupsForInput(isVideo);
     outputName.value = getSuggestedOutputName(file.name, FORMATS[outputFormat.value].ext);
     resetResultState();
-    updateGifNoteVisibility();
+    updateGifNotes();
     updateVideoNoteVisibility();
 
     if (isVideo) {
@@ -1661,6 +1730,25 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
         "This browser can't decode that file as an image. Supported inputs are whatever your browser can display — typically PNG, JPEG, WEBP, GIF, BMP, ICO, and SVG.",
         "error"
       );
+    }
+
+    if (isGifInput(file.name)) {
+      // Decode eagerly so we know whether this GIF is animated (and can show the
+      // right note) before the person even hits Convert. Cache the decoded frames
+      // so the zip-export path below doesn't have to decode the file a second time.
+      try {
+        const modernGif = await loadModernGif();
+        const buffer = await file.arrayBuffer();
+        const frames = await modernGif.decodeFrames(buffer);
+        gifFrameCount = frames.length || 1;
+        cachedGifFrames = { file, frames };
+      } catch {
+        // Non-fatal: fall back to today's single-frame behavior if decoding fails here;
+        // the convert step will surface a real error if the file truly can't be read.
+        gifFrameCount = null;
+        cachedGifFrames = null;
+      }
+      updateGifNotes();
     }
   }
 
@@ -1753,6 +1841,56 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     throw new Error(`Unsupported output format: ${format}`);
   }
 
+  // Animated GIF -> a .zip of every frame, encoded to `format`. Reuses encodeAs()
+  // per-frame so every static format (PNG/JPG/WEBP/BMP/TIFF/TGA/PPM/ICO/CUR/SVG/PDF)
+  // is supported for free. onProgress(percent, label) drives the existing progress bar.
+  async function convertGifAllFramesToZip(file, format, quality, onProgress) {
+    onProgress(5, "Reading GIF…");
+
+    let frames;
+    if (cachedGifFrames && cachedGifFrames.file === file) {
+      frames = cachedGifFrames.frames;
+    } else {
+      const modernGif = await loadModernGif();
+      const buffer = await file.arrayBuffer();
+      frames = await modernGif.decodeFrames(buffer);
+    }
+
+    const total = frames.length || 1;
+    const ext = FORMATS[format].ext;
+    const mime = FORMATS[format].mime;
+    const zipEntries = {};
+    const pad = Math.max(4, String(total).length);
+    let firstFrameBlob = null;
+
+    for (let index = 0; index < frames.length; index++) {
+      const frame = frames[index];
+      const frameCanvas = document.createElement("canvas");
+      frameCanvas.width = frame.width;
+      frameCanvas.height = frame.height;
+      frameCanvas.getContext("2d").putImageData(
+        new ImageData(new Uint8ClampedArray(frame.data), frame.width, frame.height), 0, 0
+      );
+
+      const blob = await encodeAs(frameCanvas, format, quality);
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      const frameNumber = String(index + 1).padStart(pad, "0");
+      zipEntries[`frames/frame-${frameNumber}.${ext}`] = bytes;
+      if (index === 0) firstFrameBlob = new Blob([bytes], { type: mime });
+
+      const percent = 10 + Math.round(((index + 1) / total) * 75);
+      onProgress(percent, `Encoding frame ${index + 1}/${total}`);
+      await yieldToUI();
+    }
+
+    onProgress(88, "Building zip…");
+    const zipLib = await loadZipLib();
+    const zipBytes = zipLib.zipSync(zipEntries, { level: 6 });
+    onProgress(98, "Finalizing…");
+
+    return { blob: new Blob([zipBytes], { type: "application/zip" }), frameCount: total, firstFrameBlob };
+  }
+
   convertButton.addEventListener("click", async () => {
     if (!selectedFile) {
       ui.setStatus("Choose an input file first.", "error");
@@ -1762,6 +1900,7 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     const format = outputFormat.value;
     const isVideoOutput = FORMATS[format]?.kind === "video";
     const isVideoSource = isVideoFile(selectedFile);
+    const isZipExport = isAnimatedGifSource() && isStaticImageFormat(format);
 
     if (isVideoSource && !isVideoOutput) {
       ui.setStatus("Choose MP4, WEBM, or Animated GIF as the output format for a video source.", "error");
@@ -1780,6 +1919,37 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     const quality = Number(qualitySlider.value) / 100;
 
     try {
+      if (isZipExport) {
+        ui.setProgressState(true, 0, "Starting…");
+        const { blob, frameCount, firstFrameBlob } = await convertGifAllFramesToZip(
+          selectedFile,
+          format,
+          quality,
+          (percent, label) => ui.setProgressState(true, percent, `${label} (${percent}%)`)
+        );
+
+        clearObjectUrl(outputUrl);
+        outputUrl = URL.createObjectURL(blob);
+        ui.setProgressState(true, 100, "Done (100%)");
+
+        const stemSource = outputName.value.trim() || selectedFile.name;
+        const stem = stemSource.replace(/\.[^.]+$/, "") || "frames";
+        const finalName = `${stem}-frames.zip`;
+        lastResult = { outputName: finalName, previewUrl: outputUrl };
+        outputName.value = finalName;
+        downloadButton.disabled = false;
+
+        ui.baseMeta = `Converted ${frameCount} frames to ${FORMATS[format].label} — packaged as a .zip.`;
+        if (firstFrameBlob) {
+          clearObjectUrl(previewFrameUrl);
+          previewFrameUrl = URL.createObjectURL(firstFrameBlob);
+          ui.setPreview(previewFrameUrl, "First frame of converted output");
+        }
+        ui.setPreviewMeta(ui.baseMeta);
+        ui.setStatus(`Converted ${frameCount} frames to ${FORMATS[format].label} — ready to download as ${finalName}.`, "success");
+        return;
+      }
+
       let blob;
       if (isVideoSource) {
         ui.setProgressState(true, 0, "Starting…");
@@ -1832,6 +2002,7 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
   window.addEventListener("beforeunload", () => {
     clearObjectUrl(selectedInputUrl);
     clearObjectUrl(outputUrl);
+    clearObjectUrl(previewFrameUrl);
   });
 
   ui.clearPreview();
