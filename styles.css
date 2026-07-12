@@ -435,10 +435,53 @@
         55%  { opacity: 0.45; filter: blur(2px); transform: scale(0.97)  translateY(-3px); }
         100% { opacity: 0;    filter: blur(7px); transform: scale(0.9)   translateY(-9px); }
       }
-      .warn-callout.is-dismissing {
+      /* Shared dismiss mechanism: any .warn-callout or .gif-note can be
+         dismissed with the same disintegrate-then-collapse sequence.
+         is-dismissing plays the particle-y fade; once that animation
+         ends, JS locks in a pixel height and adds is-collapsing, which
+         this transition then animates down to 0 before removal. */
+      .warn-callout, .gif-note {
+        transition: height 0.32s cubic-bezier(0.4,0,0.2,1),
+                    margin 0.32s cubic-bezier(0.4,0,0.2,1),
+                    padding 0.32s cubic-bezier(0.4,0,0.2,1),
+                    border-width 0.32s cubic-bezier(0.4,0,0.2,1),
+                    opacity 0.2s ease;
+      }
+      .warn-callout.is-dismissing, .gif-note.is-dismissing {
         animation: warnDisintegrate 0.42s cubic-bezier(0.4,0,0.7,1) forwards;
         pointer-events: none;
       }
+      .warn-callout.is-collapsing, .gif-note.is-collapsing {
+        height: 0 !important;
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        border-width: 0 !important;
+        opacity: 0;
+        overflow: hidden;
+      }
+
+      .gif-note-close {
+        flex-shrink: 0;
+        width: 20px; height: 20px;
+        margin: -2px -2px 0 0;
+        border: none;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: #a5b4fc;
+        font-size: 11px;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        opacity: 0.6;
+        transition: opacity 0.15s ease, background 0.15s ease, transform 0.15s ease;
+      }
+      .gif-note-close:hover        { opacity: 1; background: rgba(88,101,242,0.16); }
+      .gif-note-close:active       { transform: scale(0.88); }
+      .gif-note-close:focus-visible { outline: none; opacity: 1; box-shadow: 0 0 0 2px rgba(88,101,242,0.5); }
 
       
       
@@ -604,6 +647,7 @@
         padding: 9px 13px;
         font-size: 12px; color: #a5b4fc; line-height: 1.5;
       }
+      .gif-note > span:nth-child(2) { flex: 1; min-width: 0; }
 
       .gif-note-link {
         display: inline-block;
@@ -2210,6 +2254,8 @@
   border: 1px dashed #000;
   color: #000;
 }
+:root[data-theme="white"] .gif-note-close { color: #000; }
+:root[data-theme="white"] .gif-note-close:hover { opacity: 1; background: #000; color: #fff; }
 
 /* ── Conv format select ── */
 :root[data-theme="white"] .conv-format-select {
@@ -2595,6 +2641,8 @@
   border-color: rgba(255,130,180,0.3);
   color: #c07ab8;
 }
+:root[data-theme="kawaii"] .gif-note-close { color: #c07ab8; }
+:root[data-theme="kawaii"] .gif-note-close:hover { opacity: 1; background: rgba(255,130,180,0.2); }
 
 /* ── Conv format select ── */
 :root[data-theme="kawaii"] .conv-format-select {
@@ -3238,6 +3286,8 @@
 
 /* ── GIF note ── */
 :root[data-theme="discord"] .gif-note { background: rgba(88,101,242,0.07); border-color: rgba(88,101,242,0.2); color: #949ba4; }
+:root[data-theme="discord"] .gif-note-close { color: #949ba4; }
+:root[data-theme="discord"] .gif-note-close:hover { opacity: 1; background: rgba(88,101,242,0.18); }
 
 /* ── Converter select ── */
 :root[data-theme="discord"] .conv-format-select { background: #1e1f22; border: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35); color: #dbdee1; border-radius: 3px; font-family: "gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif; }
@@ -3819,6 +3869,8 @@
 :root[data-theme="gothic"] .field-label,
 :root[data-theme="gothic"] #advancedEditorPanel label.field-label { color: #a17a7a; }
 :root[data-theme="gothic"] .gif-note { background: rgba(139,0,0,0.1); border-color: rgba(139,0,0,0.28); }
+:root[data-theme="gothic"] .gif-note-close { color: #ffb3b3; }
+:root[data-theme="gothic"] .gif-note-close:hover { opacity: 1; background: rgba(204,68,68,0.2); }
 
 /* Gear button */
 :root[data-theme="gothic"] .gear-btn { color: #7a4a4a; background: rgba(139,0,0,0.06); }
