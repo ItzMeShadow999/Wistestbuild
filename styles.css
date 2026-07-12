@@ -1738,9 +1738,6 @@
 :root[data-theme="white"] .btn:hover,
 :root[data-theme="kawaii"] .btn:hover { color: var(--text); }
 
-:root[data-theme="white"] .toggle-switch input:checked + .toggle-slider {
-  background: #000; box-shadow: inset 0 2px 4px rgba(0,0,0,0.18), 0 0 8px rgba(0,0,0,0.25);
-}
 :root[data-theme="white"] .warn-callout {
   background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.22); color: #000;
 }
@@ -2137,11 +2134,48 @@
 :root[data-theme="white"] .section-divider-label { color: #000; font-weight: 700; letter-spacing: 0.08em; }
 :root[data-theme="white"] .section-divider-line { background: #000; }
 
-/* ── Toggle switch ── */
-:root[data-theme="white"] .toggle-slider { background: #ffffff; border: 1px solid #000; }
-:root[data-theme="white"] .toggle-slider::before { background: #000; }
-:root[data-theme="white"] .toggle-switch input:checked + .toggle-slider { background: #000; border-color: #000; }
-:root[data-theme="white"] .toggle-switch input:checked + .toggle-slider::before { background: #fff; }
+/* ── Toggle switch: square thumb + "blast door" wipe (same treatment as
+   the Advanced Editor's .toggle, kept here since this is a separate
+   component with identical markup used elsewhere in the app) ── */
+:root[data-theme="white"] .toggle-slider {
+  background: #ffffff;
+  border: 1px solid #000;
+  overflow: hidden;
+}
+:root[data-theme="white"] .toggle-slider::before {
+  border-radius: 0;
+  background: #000;
+  z-index: 2;
+  transition: transform 0.38s cubic-bezier(0.65, 0, 0.35, 1),
+              background-color 0.38s cubic-bezier(0.65, 0, 0.35, 1);
+}
+:root[data-theme="white"] .toggle-slider::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 0;
+  background: #000;
+  z-index: 1;
+  transition: width 0.38s cubic-bezier(0.65, 0, 0.35, 1);
+}
+:root[data-theme="white"] .toggle-switch input:checked + .toggle-slider {
+  background: #ffffff;
+  border-color: #000;
+}
+:root[data-theme="white"] .toggle-switch input:checked + .toggle-slider::after {
+  width: 100%;
+}
+:root[data-theme="white"] .toggle-switch input:checked + .toggle-slider::before {
+  background: #ffffff;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme="white"] .toggle-slider::before,
+  :root[data-theme="white"] .toggle-slider::after,
+  :root[data-theme="white"] #advancedEditorPanel .toggle-track::before,
+  :root[data-theme="white"] #advancedEditorPanel .toggle-track::after {
+    transition-duration: 0.001ms;
+  }
+}
 
 /* ── Warn callout (styled like a boxed "correction notice") ── */
 :root[data-theme="white"] .warn-callout {
@@ -2288,9 +2322,48 @@
 :root[data-theme="white"] #advancedEditorPanel .status-bar[data-tone="success"],
 :root[data-theme="white"] #advancedEditorPanel .status-bar[data-tone="error"],
 :root[data-theme="white"] #advancedEditorPanel .status-bar[data-tone="info"] { color: #000; }
-:root[data-theme="white"] #advancedEditorPanel .toggle-track { background: #ffffff; border: 1px solid #000; }
-:root[data-theme="white"] #advancedEditorPanel .toggle input:checked + .toggle-track { background: #000; }
-:root[data-theme="white"] #advancedEditorPanel .toggle input:checked + .toggle-track::before { background: #fff; }
+/* ── Toggles: square thumb + "blast door" wipe (instead of a sliding pill) ──
+   .toggle-track itself is already forced square by the global wildcard
+   (border-radius:0 !important on every real element), but its ::before
+   thumb is a pseudo-element the wildcard can't reach, so it stayed a
+   circle — squared off explicitly below.
+   The "wipe" is a second pseudo-element (::after) sitting between the
+   track's background and the thumb: it's a solid black fill whose width
+   animates from 0 → 100% over the exact same duration/easing as the
+   thumb's slide, so the black edge appears to travel *with* the thumb
+   rather than the track just flipping color instantly. Reversed on
+   uncheck, so it "unpaints" back to white as the thumb returns. */
+:root[data-theme="white"] #advancedEditorPanel .toggle-track {
+  background: #ffffff;
+  border: 1px solid #000;
+  overflow: hidden;
+}
+:root[data-theme="white"] #advancedEditorPanel .toggle-track::before {
+  border-radius: 0;
+  background: #000;
+  z-index: 2;
+  transition: transform 0.38s cubic-bezier(0.65, 0, 0.35, 1),
+              background-color 0.38s cubic-bezier(0.65, 0, 0.35, 1);
+}
+:root[data-theme="white"] #advancedEditorPanel .toggle-track::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 0;
+  background: #000;
+  z-index: 1;
+  transition: width 0.38s cubic-bezier(0.65, 0, 0.35, 1);
+}
+:root[data-theme="white"] #advancedEditorPanel .toggle input:checked + .toggle-track {
+  background: #ffffff;
+  border-color: #000;
+}
+:root[data-theme="white"] #advancedEditorPanel .toggle input:checked + .toggle-track::after {
+  width: 100%;
+}
+:root[data-theme="white"] #advancedEditorPanel .toggle input:checked + .toggle-track::before {
+  background: #ffffff;
+}
 :root[data-theme="white"] #advancedEditorPanel .section-sep { background: rgba(0,0,0,0.3); }
 :root[data-theme="white"] #advancedEditorPanel .badge-purple,
 :root[data-theme="white"] #advancedEditorPanel .badge-yellow { background: #ffffff; color: #000; border: 1px solid #000; }
