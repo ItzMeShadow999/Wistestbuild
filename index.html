@@ -303,7 +303,7 @@
         aria-label="File Converter"
         hidden
       >
-        <div class="gif-note" role="note">
+        <div class="gif-note" role="note" id="convNoteVideoSupport">
           <span>ℹ</span>
           <span
             >Converts images entirely in your browser. Video input (MP4,
@@ -311,6 +311,14 @@
             downloads a video engine (~30MB) that's then cached for the rest
             of your session.</span
           >
+          <button
+            type="button"
+            class="gif-note-close"
+            aria-label="Dismiss this notice"
+            onclick="dismissCallout('convNoteVideoSupport')"
+          >
+            ✕
+          </button>
         </div>
 
         <div style="height: 14px"></div>
@@ -367,7 +375,7 @@
             >
           </div>
         </div>
-        <div class="gif-note" style="margin-top: 10px">
+        <div class="gif-note" style="margin-top: 10px" id="convNoteDirectLinkHelp">
           <span>ℹ</span>
           <span
             >Works with direct links to an image (PNG, JPG, WEBP, GIF, SVG,
@@ -376,6 +384,14 @@
             would need to allow cross-origin fetches of the underlying
             file.</span
           >
+          <button
+            type="button"
+            class="gif-note-close"
+            aria-label="Dismiss this notice"
+            onclick="dismissCallout('convNoteDirectLinkHelp')"
+          >
+            ✕
+          </button>
         </div>
 
         <div style="height: 14px"></div>
@@ -591,7 +607,7 @@
             >
           </div>
 
-          <div class="warn-callout" role="note">
+          <div class="warn-callout" role="note" id="advGifStaticWarning">
             <em class="warn-callout-icon">⚠</em>
             <span
               >The Advanced Editor works on
@@ -603,6 +619,7 @@
               type="button"
               class="warn-callout-close"
               aria-label="Dismiss this notice"
+              onclick="dismissCallout('advGifStaticWarning')"
             >
               ✕
             </button>
@@ -2260,23 +2277,24 @@
     </script>
 
     <script>
-      function dismissWarnCallout(id) {
+      function dismissCallout(id) {
         var el = document.getElementById(id);
-        if (!el || el.classList.contains("warn-callout--dismissing")) return;
-        el.classList.add("warn-callout--dismissing");
+        if (!el || el.classList.contains("is-dismissing")) return;
+        el.classList.add("is-dismissing");
         el.addEventListener("animationend", function onEnd(e) {
           if (e.animationName !== "warnDisintegrate") return;
           el.removeEventListener("animationend", onEnd);
           el.style.height = el.offsetHeight + "px";
-          el.style.marginBottom = getComputedStyle(el).marginBottom;
           void el.offsetHeight;
-          el.classList.add("warn-callout--collapsing");
+          el.classList.add("is-collapsing");
           el.addEventListener("transitionend", function onCollapse() {
             el.removeEventListener("transitionend", onCollapse);
             el.remove();
           });
         });
       }
+      // Back-compat alias in case anything still calls the old name.
+      var dismissWarnCallout = dismissCallout;
     </script>
   </body>
 </html>
