@@ -396,7 +396,7 @@ function fileNameFromUrl(url, contentType) {
   return `${stem}.${extension}`;
 }
 
-async function fetchImageAsFile(rawUrl, allowVideo = false) {
+async function fetchImageAsFile(rawUrl) {
   let url;
   try {
     url = new URL(rawUrl);
@@ -419,17 +419,12 @@ async function fetchImageAsFile(rawUrl, allowVideo = false) {
 
   const blob = await response.blob();
   const contentType = blob.type || response.headers.get("content-type") || "";
-  const isImageType = contentType.startsWith("image/");
-  const isVideoType = contentType.startsWith("video/");
-  if (contentType && !isImageType && !(allowVideo && isVideoType)) {
-    throw new Error(
-      allowVideo ? "That URL doesn't point to an image or video." : "That URL doesn't point to an image."
-    );
+  if (contentType && !contentType.startsWith("image/")) {
+    throw new Error("That URL doesn't point to an image.");
   }
 
-  const fileName =
-    allowVideo && isVideoType ? mediaFileNameFromUrl(url.href, contentType) : fileNameFromUrl(url.href, contentType);
-  return new File([blob], fileName, { type: contentType || (isVideoType ? "video/mp4" : "image/png") });
+  const fileName = fileNameFromUrl(url.href, contentType);
+  return new File([blob], fileName, { type: contentType || "image/png" });
 }
 
 function mediaFileNameFromUrl(url, contentType) {
@@ -575,12 +570,6 @@ function isGifInput(fileName) {
   return /\.gif$/i.test(fileName);
 }
 
-function isVideoFile(file) {
-  if (!file) return false;
-  if (file.type && file.type.startsWith("video/")) return true;
-  return /\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(file.name || "");
-}
-
 
 
 let modernGifPromise = null;
@@ -619,229 +608,7 @@ async function loadModernGif() {
 
 
 
-// Lazy-loaded video engine (ffmpeg.wasm), mirroring the loadModernGif() pattern above:
-// loaded on first use from a CDN, cached in-memory afterward. The single-threaded
-// core build is used deliberately, since it doesn't require SharedArrayBuffer /
-// cross-origin-isolation headers, which this app doesn't set up.
-let ffmpegPromise = null;
-
-async function loadFFmpeg() {
-  if (ffmpegPromise) return ffmpegPromise;
-
-  ffmpegPromise = (async () => {
-    const sources = [
-      { core: "https://esm.sh/@ffmpeg/ffmpeg@0.12.10", util: "https://esm.sh/@ffmpeg/util@0.12.1" },
-      {
-        core: "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/+esm",
-        util: "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/+esm",
-      },
-    ];
-    const CORE_BASE = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
-
-    let lastError = null;
-    for (const source of sources) {
-      try {
-        const [ffmpegModule, utilModule] = await Promise.all([import(source.core), import(source.util)]);
-        const FFmpegCtor = ffmpegModule?.FFmpeg;
-        const toBlobURL = utilModule?.toBlobURL;
-        if (!FFmpegCtor || !toBlobURL) {
-          lastError = new Error(`Loaded ${source.core} but it did not expose the expected ffmpeg API.`);
-          continue;
-        }
-
-        const ffmpeg = new FFmpegCtor();
-        const [coreURL, wasmURL] = await Promise.all([
-          toBlobURL(`${CORE_BASE}/ffmpeg-core.js`, "text/javascript"),
-          toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`, "application/wasm"),
-        ]);
-        await ffmpeg.load({ coreURL, wasmURL });
-        return ffmpeg;
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    throw lastError ?? new Error("Could not load the video engine from any source.");
-  })();
-
-  try {
-    return await ffmpegPromise;
-  } catch (error) {
-    ffmpegPromise = null;
-    throw error;
-  }
-}
-
-
-
-function qualityToCRF(quality) {
-  // quality is 0..1 (higher = better), matching the existing lossy-image quality convention.
-  // Map it onto a sane libx264/libvpx-vp9 CRF range: lower CRF = higher quality.
-  const clamped = Math.min(1, Math.max(0, quality));
-  return Math.round(40 - clamped * 22); // quality 1.0 -> CRF 18 (best), quality 0.0 -> CRF 40 (worst)
-}
-
-function qualityToGifSettings(quality) {
-  // For GIF, quality drives frame rate and palette size rather than downscaling.
-  const clamped = Math.min(1, Math.max(0, quality));
-  const fps = Math.round(8 + clamped * 17); // 8..25 fps
-  const colors = Math.round(32 + clamped * 224); // 32..256 colors
-  return { fps, colors };
-}
-
-const VIDEO_FORMATS = {
-  mp4: { ext: "mp4", mime: "video/mp4", label: "MP4" },
-  webm: { ext: "webm", mime: "video/webm", label: "WEBM" },
-  animgif: { ext: "gif", mime: "image/gif", label: "Animated GIF (from video)" },
-};
-
-// Runs the actual ffmpeg.wasm pipeline: writes the input to ffmpeg's virtual filesystem,
-// executes the mapped args for the requested output format, reads back the result, and
-// returns it as a Blob. onProgress(percent, label) is called throughout for UI feedback.
-async function runFFmpegVideo(file, format, quality, onProgress) {
-  const info = VIDEO_FORMATS[format];
-  if (!info) throw new Error(`Unsupported video format: ${format}`);
-
-  onProgress(5, "Loading video engine…");
-  const ffmpeg = await loadFFmpeg();
-
-  const sourceExt = (file.name.match(/\.[^.]+$/) || [".mp4"])[0].toLowerCase();
-  const inputName = `input${sourceExt}`;
-  const outputName = `output.${info.ext}`;
-  const cleanupNames = [inputName, outputName];
-
-  let stageStart = 0;
-  let stageEnd = 0;
-  let stageLabel = "";
-
-  function progressHandler({ progress }) {
-    if (typeof progress !== "number" || !Number.isFinite(progress)) return;
-    const clamped = Math.min(1, Math.max(0, progress));
-    const percent = Math.round(stageStart + clamped * (stageEnd - stageStart));
-    onProgress(percent, stageLabel);
-  }
-  ffmpeg.on("progress", progressHandler);
-
-  function setStage(start, end, label) {
-    stageStart = start;
-    stageEnd = end;
-    stageLabel = label;
-    onProgress(start, label);
-  }
-
-  try {
-    onProgress(15, "Writing input to virtual filesystem…");
-    const buffer = new Uint8Array(await file.arrayBuffer());
-    await ffmpeg.writeFile(inputName, buffer);
-
-    if (format === "mp4") {
-      const crf = qualityToCRF(quality);
-      setStage(20, 90, "Encoding MP4…");
-      await ffmpeg.exec([
-        "-i", inputName,
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", String(crf),
-        "-pix_fmt", "yuv420p",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-movflags", "+faststart",
-        outputName,
-      ]);
-    } else if (format === "webm") {
-      const crf = qualityToCRF(quality);
-      setStage(20, 90, "Encoding WEBM…");
-      await ffmpeg.exec([
-        "-i", inputName,
-        "-c:v", "libvpx-vp9",
-        "-crf", String(crf),
-        "-b:v", "0",
-        "-deadline", "good",
-        "-cpu-used", "4",
-        "-c:a", "libopus",
-        "-b:a", "128k",
-        outputName,
-      ]);
-    } else if (format === "animgif") {
-      const { fps, colors } = qualityToGifSettings(quality);
-      const paletteName = "palette.png";
-      cleanupNames.push(paletteName);
-
-      setStage(20, 55, "Generating color palette…");
-      await ffmpeg.exec([
-        "-i", inputName,
-        "-vf", `fps=${fps},scale=480:-1:flags=lanczos,palettegen=max_colors=${colors}`,
-        paletteName,
-      ]);
-
-      setStage(55, 90, "Encoding animated GIF…");
-      await ffmpeg.exec([
-        "-i", inputName,
-        "-i", paletteName,
-        "-lavfi", `fps=${fps},scale=480:-1:flags=lanczos [x]; [x][1:v] paletteuse`,
-        "-loop", "0",
-        outputName,
-      ]);
-    }
-
-    onProgress(92, "Reading output…");
-    const data = await ffmpeg.readFile(outputName);
-    onProgress(98, "Finalizing…");
-    return new Blob([data.buffer ?? data], { type: info.mime });
-  } finally {
-    if (typeof ffmpeg.off === "function") {
-      ffmpeg.off("progress", progressHandler);
-    }
-    for (const name of cleanupNames) {
-      try {
-        await ffmpeg.deleteFile(name);
-      } catch {
-        // best-effort cleanup — a missing file (e.g. a stage that never ran) is not an error here
-      }
-    }
-  }
-}
-
-
-
-// Lazy-loaded zip encoder, mirroring loadModernGif()/loadFFmpeg(): loaded on first
-// use from a CDN, cached in-memory afterward. Used for "animated GIF -> every frame"
-// exports, where the result is a folder of images rather than a single file.
-let zipLibPromise = null;
-
-async function loadZipLib() {
-  if (zipLibPromise) return zipLibPromise;
-
-  zipLibPromise = (async () => {
-    const sources = ["https://esm.sh/fflate@0.8.2", "https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm"];
-
-    let lastError = null;
-    for (const source of sources) {
-      try {
-        const module = await import(source);
-        if (module?.zipSync) {
-          return module;
-        }
-        lastError = new Error(`Loaded ${source} but it did not expose the expected zip API.`);
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    throw lastError ?? new Error("Could not load the zip engine from any source.");
-  })();
-
-  try {
-    return await zipLibPromise;
-  } catch (error) {
-    zipLibPromise = null;
-    throw error;
-  }
-}
-
-
-
 function createPanelUI(refs) {
-  const hasVideoPreview = !!refs.previewVideo;
-
   function setPreviewLoading(loading, message = "Loading preview...") {
     refs.previewLoading.hidden = !loading;
     refs.previewLoadingText.textContent = loading ? message : "";
@@ -859,36 +626,16 @@ function createPanelUI(refs) {
     refs.previewMeta.textContent = message;
   }
 
-  // kind is "image" (default) or "video". Panels without a previewVideo ref
-  // (e.g. Widget Framer) simply never pass "video" and this behaves as before.
-  function setPreview(src, label, kind = "image") {
-    if (kind === "video" && hasVideoPreview) {
-      refs.previewVideo.src = src;
-      refs.previewVideo.hidden = false;
-      refs.previewImage.hidden = true;
-      refs.previewImage.removeAttribute("src");
-      refs.previewEmpty.hidden = true;
-      return;
-    }
+  function setPreview(src, label) {
     refs.previewImage.src = src;
     refs.previewImage.alt = label;
     refs.previewImage.hidden = false;
     refs.previewEmpty.hidden = true;
-    if (hasVideoPreview) {
-      refs.previewVideo.pause();
-      refs.previewVideo.hidden = true;
-      refs.previewVideo.removeAttribute("src");
-    }
   }
 
   function clearPreview() {
     refs.previewImage.removeAttribute("src");
     refs.previewImage.hidden = true;
-    if (hasVideoPreview) {
-      refs.previewVideo.pause();
-      refs.previewVideo.removeAttribute("src");
-      refs.previewVideo.hidden = true;
-    }
     refs.previewEmpty.hidden = false;
     ui.baseMeta = "";
     setPreviewMeta("");
@@ -898,11 +645,6 @@ function createPanelUI(refs) {
   }
 
   function updatePreviewMetaWithDimensions() {
-    if (hasVideoPreview && !refs.previewVideo.hidden && refs.previewVideo.videoWidth) {
-      const dims = `${refs.previewVideo.videoWidth}x${refs.previewVideo.videoHeight}`;
-      setPreviewMeta(ui.baseMeta ? `${ui.baseMeta} ${dims}.` : dims);
-      return;
-    }
     if (refs.previewImage.hidden || !refs.previewImage.naturalWidth || !refs.previewImage.naturalHeight) {
       setPreviewMeta(ui.baseMeta);
       return;
@@ -938,23 +680,12 @@ function createPanelUI(refs) {
     setPreviewMeta(ui.baseMeta || "Preview unavailable.");
   });
 
-  if (hasVideoPreview) {
-    refs.previewVideo.addEventListener("loadedmetadata", () => {
-      setPreviewLoading(false);
-      updatePreviewMetaWithDimensions();
-    });
-    refs.previewVideo.addEventListener("error", () => {
-      setPreviewLoading(false);
-      setPreviewMeta(ui.baseMeta || "Preview unavailable.");
-    });
-  }
-
   return ui;
 }
 
 
 
-function wireImagePicker({ dropZone, browseButton, fileInput, urlInput, urlImportButton, ui, onFile, allowVideo = false }) {
+function wireImagePicker({ dropZone, browseButton, fileInput, urlInput, urlImportButton, ui, onFile }) {
   function openFileDialog() {
     return new Promise((resolve) => {
       fileInput.value = "";
@@ -966,14 +697,14 @@ function wireImagePicker({ dropZone, browseButton, fileInput, urlInput, urlImpor
   async function importFromUrl(rawUrl) {
     const trimmed = (rawUrl || "").trim();
     if (!trimmed) {
-      ui.setStatus(allowVideo ? "Paste an image or video URL first." : "Paste an image URL first.", "error");
+      ui.setStatus("Paste an image URL first.", "error");
       return;
     }
     urlImportButton.disabled = true;
     ui.setStatus("", "neutral");
-    ui.setPreviewLoading(true, allowVideo ? "Fetching file from URL..." : "Fetching image from URL...");
+    ui.setPreviewLoading(true, "Fetching image from URL...");
     try {
-      const file = await fetchImageAsFile(trimmed, allowVideo);
+      const file = await fetchImageAsFile(trimmed);
       await onFile(file);
       urlInput.value = "";
     } catch (error) {
@@ -1552,10 +1283,6 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     tiff: { ext: "tiff", mime: "image/tiff", label: "TIFF" },
     svg: { ext: "svg", mime: "image/svg+xml", label: "SVG (wrapped raster)" },
     pdf: { ext: "pdf", mime: "application/pdf", label: "PDF" },
-    // Video formats (routed through ffmpeg.wasm instead of the canvas pipeline).
-    mp4: { ...VIDEO_FORMATS.mp4, kind: "video" },
-    webm: { ...VIDEO_FORMATS.webm, kind: "video" },
-    animgif: { ...VIDEO_FORMATS.animgif, kind: "video" },
   };
 
   const refs = {
@@ -1567,7 +1294,6 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     progressBar: document.querySelector("#progressBarConv"),
     progressLabel: document.querySelector("#progressLabelConv"),
     previewImage: document.querySelector("#previewImageConv"),
-    previewVideo: document.querySelector("#previewVideoConv"),
     previewMeta: document.querySelector("#previewMetaConv"),
     status: document.querySelector("#statusConv"),
   };
@@ -1575,15 +1301,10 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
   const inputPath = document.querySelector("#inputPathConv");
   const outputName = document.querySelector("#outputNameConv");
   const outputFormat = document.querySelector("#outputFormatConv");
-  const formatGroupImage = document.querySelector("#formatGroupImageConv");
-  const formatGroupVideo = document.querySelector("#formatGroupVideoConv");
   const qualityRow = document.querySelector("#qualityRowConv");
   const qualitySlider = document.querySelector("#qualityConv");
   const qualityValue = document.querySelector("#qualityValueConv");
   const gifNote = document.querySelector("#gifSourceNoteConv");
-  const gifAllFramesNote = document.querySelector("#gifAllFramesNoteConv");
-  const gifAllFramesCount = document.querySelector("#gifAllFramesCountConv");
-  const videoNote = document.querySelector("#videoSourceNoteConv");
   const browseButton = document.querySelector("#browseButtonConv");
   const convertButton = document.querySelector("#convertButtonConv");
   const downloadButton = document.querySelector("#downloadButtonConv");
@@ -1597,12 +1318,7 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
   let selectedFile = null;
   let selectedInputUrl = "";
   let outputUrl = "";
-  let previewFrameUrl = "";
   let lastResult = null;
-  // Cached frame count for the currently-selected GIF (null = not a GIF / not decoded yet).
-  let gifFrameCount = null;
-  // { file, frames } cache so the zip-export path can reuse the decode from handleSelectedFile.
-  let cachedGifFrames = null;
 
   
   
@@ -1619,54 +1335,12 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
   })();
 
   function updateQualityVisibility() {
-    const lossy = ["jpg", "webp", "avif", "mp4", "webm", "animgif"].includes(outputFormat.value);
+    const lossy = ["jpg", "webp", "avif"].includes(outputFormat.value);
     qualityRow.hidden = !lossy;
   }
 
-  function isStaticImageFormat(format) {
-    return FORMATS[format]?.kind !== "video" && format !== "gif";
-  }
-
-  function isAnimatedGifSource() {
-    return !!(selectedFile && !isVideoFile(selectedFile) && isGifInput(selectedFile.name) && gifFrameCount > 1);
-  }
-
   function updateGifNoteVisibility() {
-    // Once a GIF is known to be animated and the output is a static image format,
-    // gifAllFramesNote takes over — this note is only for the "single frame kept" case
-    // (non-animated GIF source, or animated GIF -> static GIF).
-    const isGifSource = !!(selectedFile && !isVideoFile(selectedFile) && isGifInput(selectedFile.name));
-    gifNote.hidden = !(isGifSource && !(isAnimatedGifSource() && isStaticImageFormat(outputFormat.value)));
-  }
-
-  function updateAllFramesNoteVisibility() {
-    const show = isAnimatedGifSource() && isStaticImageFormat(outputFormat.value);
-    gifAllFramesNote.hidden = !show;
-    if (show) gifAllFramesCount.textContent = String(gifFrameCount);
-  }
-
-  function updateGifNotes() {
-    updateGifNoteVisibility();
-    updateAllFramesNoteVisibility();
-  }
-
-  function updateVideoNoteVisibility() {
-    videoNote.hidden = !(selectedFile && isVideoFile(selectedFile));
-  }
-
-  // The output <select> keeps Image and Video formats in separate <optgroup>s, and we
-  // just toggle which one is visible via `hidden` rather than rebuilding the DOM.
-  function updateFormatGroupsForInput(isVideo) {
-    formatGroupImage.hidden = isVideo;
-    formatGroupVideo.hidden = !isVideo;
-
-    const currentIsVideoFormat = FORMATS[outputFormat.value]?.kind === "video";
-    if (isVideo && !currentIsVideoFormat) {
-      outputFormat.value = "mp4";
-    } else if (!isVideo && currentIsVideoFormat) {
-      outputFormat.value = "png";
-    }
-    updateQualityVisibility();
+    gifNote.hidden = !(selectedFile && isGifInput(selectedFile.name));
   }
 
   qualitySlider.addEventListener("input", () => {
@@ -1675,7 +1349,6 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
 
   outputFormat.addEventListener("change", () => {
     updateQualityVisibility();
-    updateGifNotes();
     if (inputPath.value.trim() && outputName.value.trim()) {
       outputName.value = replaceExtension(outputName.value.trim(), FORMATS[outputFormat.value].ext);
     }
@@ -1694,25 +1367,10 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     clearObjectUrl(selectedInputUrl);
     selectedInputUrl = URL.createObjectURL(file);
 
-    const isVideo = isVideoFile(file);
-    gifFrameCount = null;
-    cachedGifFrames = null;
-
     inputPath.value = file.name;
-    updateFormatGroupsForInput(isVideo);
     outputName.value = getSuggestedOutputName(file.name, FORMATS[outputFormat.value].ext);
     resetResultState();
-    updateGifNotes();
-    updateVideoNoteVisibility();
-
-    if (isVideo) {
-      ui.baseMeta = "Previewing selected video.";
-      ui.setPreviewLoading(true, "");
-      ui.setPreview(selectedInputUrl, "Selected input video", "video");
-      ui.setPreviewMeta(ui.baseMeta);
-      ui.setStatus("", "neutral");
-      return;
-    }
+    updateGifNoteVisibility();
 
     ui.baseMeta = "Previewing selected file.";
     ui.setPreviewLoading(true, "");
@@ -1731,25 +1389,6 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
         "error"
       );
     }
-
-    if (isGifInput(file.name)) {
-      // Decode eagerly so we know whether this GIF is animated (and can show the
-      // right note) before the person even hits Convert. Cache the decoded frames
-      // so the zip-export path below doesn't have to decode the file a second time.
-      try {
-        const modernGif = await loadModernGif();
-        const buffer = await file.arrayBuffer();
-        const frames = await modernGif.decodeFrames(buffer);
-        gifFrameCount = frames.length || 1;
-        cachedGifFrames = { file, frames };
-      } catch {
-        // Non-fatal: fall back to today's single-frame behavior if decoding fails here;
-        // the convert step will surface a real error if the file truly can't be read.
-        gifFrameCount = null;
-        cachedGifFrames = null;
-      }
-      updateGifNotes();
-    }
   }
 
   wireImagePicker({
@@ -1760,7 +1399,6 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     urlImportButton,
     ui,
     onFile: handleSelectedFile,
-    allowVideo: true,
   });
 
   wireMediaDownloader({
@@ -1841,129 +1479,27 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     throw new Error(`Unsupported output format: ${format}`);
   }
 
-  // Animated GIF -> a .zip of every frame, encoded to `format`. Reuses encodeAs()
-  // per-frame so every static format (PNG/JPG/WEBP/BMP/TIFF/TGA/PPM/ICO/CUR/SVG/PDF)
-  // is supported for free. onProgress(percent, label) drives the existing progress bar.
-  async function convertGifAllFramesToZip(file, format, quality, onProgress) {
-    onProgress(5, "Reading GIF…");
-
-    let frames;
-    if (cachedGifFrames && cachedGifFrames.file === file) {
-      frames = cachedGifFrames.frames;
-    } else {
-      const modernGif = await loadModernGif();
-      const buffer = await file.arrayBuffer();
-      frames = await modernGif.decodeFrames(buffer);
-    }
-
-    const total = frames.length || 1;
-    const ext = FORMATS[format].ext;
-    const mime = FORMATS[format].mime;
-    const zipEntries = {};
-    const pad = Math.max(4, String(total).length);
-    let firstFrameBlob = null;
-
-    for (let index = 0; index < frames.length; index++) {
-      const frame = frames[index];
-      const frameCanvas = document.createElement("canvas");
-      frameCanvas.width = frame.width;
-      frameCanvas.height = frame.height;
-      frameCanvas.getContext("2d").putImageData(
-        new ImageData(new Uint8ClampedArray(frame.data), frame.width, frame.height), 0, 0
-      );
-
-      const blob = await encodeAs(frameCanvas, format, quality);
-      const bytes = new Uint8Array(await blob.arrayBuffer());
-      const frameNumber = String(index + 1).padStart(pad, "0");
-      zipEntries[`frames/frame-${frameNumber}.${ext}`] = bytes;
-      if (index === 0) firstFrameBlob = new Blob([bytes], { type: mime });
-
-      const percent = 10 + Math.round(((index + 1) / total) * 75);
-      onProgress(percent, `Encoding frame ${index + 1}/${total}`);
-      await yieldToUI();
-    }
-
-    onProgress(88, "Building zip…");
-    const zipLib = await loadZipLib();
-    const zipBytes = zipLib.zipSync(zipEntries, { level: 6 });
-    onProgress(98, "Finalizing…");
-
-    return { blob: new Blob([zipBytes], { type: "application/zip" }), frameCount: total, firstFrameBlob };
-  }
-
   convertButton.addEventListener("click", async () => {
     if (!selectedFile) {
       ui.setStatus("Choose an input file first.", "error");
       return;
     }
 
-    const format = outputFormat.value;
-    const isVideoOutput = FORMATS[format]?.kind === "video";
-    const isVideoSource = isVideoFile(selectedFile);
-    const isZipExport = isAnimatedGifSource() && isStaticImageFormat(format);
-
-    if (isVideoSource && !isVideoOutput) {
-      ui.setStatus("Choose MP4, WEBM, or Animated GIF as the output format for a video source.", "error");
-      return;
-    }
-    if (!isVideoSource && isVideoOutput) {
-      ui.setStatus("MP4 / WEBM / Animated GIF outputs require a video source file.", "error");
-      return;
-    }
-
     convertButton.disabled = true;
     downloadButton.disabled = true;
+    ui.setProgressState(true, 20, "Decoding source (20%)");
     ui.setStatus("", "neutral");
     ui.setPreviewLoading(true, "");
 
+    const format = outputFormat.value;
     const quality = Number(qualitySlider.value) / 100;
 
     try {
-      if (isZipExport) {
-        ui.setProgressState(true, 0, "Starting…");
-        const { blob, frameCount, firstFrameBlob } = await convertGifAllFramesToZip(
-          selectedFile,
-          format,
-          quality,
-          (percent, label) => ui.setProgressState(true, percent, `${label} (${percent}%)`)
-        );
+      const image = await loadImageElement(selectedInputUrl);
+      const canvas = drawToCanvas(image, image.naturalWidth, image.naturalHeight);
 
-        clearObjectUrl(outputUrl);
-        outputUrl = URL.createObjectURL(blob);
-        ui.setProgressState(true, 100, "Done (100%)");
-
-        const stemSource = outputName.value.trim() || selectedFile.name;
-        const stem = stemSource.replace(/\.[^.]+$/, "") || "frames";
-        const finalName = `${stem}-frames.zip`;
-        lastResult = { outputName: finalName, previewUrl: outputUrl };
-        outputName.value = finalName;
-        downloadButton.disabled = false;
-
-        ui.baseMeta = `Converted ${frameCount} frames to ${FORMATS[format].label} — packaged as a .zip.`;
-        if (firstFrameBlob) {
-          clearObjectUrl(previewFrameUrl);
-          previewFrameUrl = URL.createObjectURL(firstFrameBlob);
-          ui.setPreview(previewFrameUrl, "First frame of converted output");
-        }
-        ui.setPreviewMeta(ui.baseMeta);
-        ui.setStatus(`Converted ${frameCount} frames to ${FORMATS[format].label} — ready to download as ${finalName}.`, "success");
-        return;
-      }
-
-      let blob;
-      if (isVideoSource) {
-        ui.setProgressState(true, 0, "Starting…");
-        blob = await runFFmpegVideo(selectedFile, format, quality, (percent, label) => {
-          ui.setProgressState(true, percent, `${label} (${percent}%)`);
-        });
-      } else {
-        ui.setProgressState(true, 20, "Decoding source (20%)");
-        const image = await loadImageElement(selectedInputUrl);
-        const canvas = drawToCanvas(image, image.naturalWidth, image.naturalHeight);
-
-        ui.setProgressState(true, 60, "Encoding output (60%)");
-        blob = await encodeAs(canvas, format, quality);
-      }
+      ui.setProgressState(true, 60, "Encoding output (60%)");
+      const blob = await encodeAs(canvas, format, quality);
 
       clearObjectUrl(outputUrl);
       outputUrl = URL.createObjectURL(blob);
@@ -1974,8 +1510,7 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
       downloadButton.disabled = false;
 
       ui.baseMeta = `Converted to ${FORMATS[format].label}.`;
-      const outputIsPlayableVideo = format === "mp4" || format === "webm";
-      ui.setPreview(outputUrl, "Converted output", outputIsPlayableVideo ? "video" : "image");
+      ui.setPreview(outputUrl, "Converted output image");
       ui.setPreviewMeta(ui.baseMeta);
       ui.setStatus("", "success");
     } catch (error) {
@@ -2002,7 +1537,6 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
   window.addEventListener("beforeunload", () => {
     clearObjectUrl(selectedInputUrl);
     clearObjectUrl(outputUrl);
-    clearObjectUrl(previewFrameUrl);
   });
 
   ui.clearPreview();
@@ -2141,6 +1675,16 @@ const PRESETS = {
 
 
 
+function getThemeAccentColor() {
+  // Reads the current theme's accent color from the --violet CSS variable
+  // (defined per-theme in styles.css) rather than hardcoding a color here,
+  // so canvas-drawn UI stays in sync with whatever theme is active — e.g.
+  // White mode sets --violet to black, Discord sets it to blurple, etc.
+  const v = getComputedStyle(document.documentElement)
+    .getPropertyValue('--violet').trim();
+  return v || '#8b5cf6';
+}
+
 function buildThumb(w, h, size = 44) {
   const c = document.createElement('canvas');
   const aspect = w / h;
@@ -2150,11 +1694,19 @@ function buildThumb(w, h, size = 44) {
   tw = Math.max(tw, 4); th = Math.max(th, 4);
   c.width = tw; c.height = th;
   const cx = c.getContext('2d');
-  cx.fillStyle = 'rgba(139,92,246,0.15)';
+  const accent = getThemeAccentColor();
+  cx.globalAlpha = 0.15;
+  cx.fillStyle = accent;
   cx.fillRect(0, 0, tw, th);
-  cx.strokeStyle = 'rgba(139,92,246,0.35)';
+  cx.globalAlpha = 0.35;
+  cx.strokeStyle = accent;
   cx.strokeRect(0.5, 0.5, tw - 1, th - 1);
+  cx.globalAlpha = 1;
   return c;
+}
+
+function renderAllPresetGrids() {
+  ['discord', 'social', 'print', 'game', 'custom'].forEach(renderPresetGrid);
 }
 
 function renderPresetGrid(category) {
@@ -2187,7 +1739,7 @@ function renderPresetGrid(category) {
   });
 }
 
-['discord', 'social', 'print', 'game', 'custom'].forEach(renderPresetGrid);
+renderAllPresetGrids();
 
 function applyPreset(category, index) {
   const p = PRESETS[category][index];
@@ -2897,7 +2449,7 @@ document.getElementById('canvasBgTransparent').addEventListener('change', () => 
   'use strict';
 
   var STORAGE_KEY = 'wis-theme';
-  var DEFAULT_THEME = '𝙾𝚛𝚒𝚐𝚒𝚗𝚊𝚕';
+  var DEFAULT_THEME = 'original';
 
   var THEMES = [
     { id: 'original', name: '𝙾𝚛𝚒𝚐𝚒𝚗𝚊𝚕',   icon: '𝕎', c1: '#0f1013', c2: '#5865f2',
@@ -2956,6 +2508,7 @@ document.getElementById('canvasBgTransparent').addEventListener('change', () => 
     if (opts.persist !== false) writeStoredTheme(theme.id);
     updateTriggerUI();
     updateActiveStates();
+    if (typeof renderAllPresetGrids === 'function') renderAllPresetGrids();
     if (!opts.silent) logThemeChange(theme.id);
   }
 
