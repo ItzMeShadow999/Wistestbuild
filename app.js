@@ -436,18 +436,22 @@ function mediaFileNameFromUrl(url, contentType) {
   }
   pathname = decodeURIComponent(pathname).split(/[?#]/)[0] || "download";
 
-  if (/\.(mp4|gif|webm|mov|m4v)$/i.test(pathname)) {
+  if (/\.(mp4|gif|webm|mov|m4v|png|jpe?g|webp|bmp|ico|svg|avif|tiff?|tga|ppm|heic|heif)$/i.test(pathname)) {
     return pathname;
   }
 
   const subtype = (contentType || "").split("/")[1]?.split(/[+;]/)[0]?.toLowerCase();
-  const extension = subtype === "quicktime" ? "mov" : (subtype || "mp4");
+  const EXT_MAP = { quicktime: "mov", jpeg: "jpg", "svg+xml": "svg" };
+  const extension = EXT_MAP[subtype] || subtype || "mp4";
   const stem = pathname.replace(/\.[^.]+$/, "") || "download";
   return `${stem}.${extension}`;
 }
 
 async function fetchMediaAsFile(rawUrl, { acceptTypes } = {}) {
-  const types = acceptTypes ?? ["video/mp4", "image/gif"];
+  // Accept any image or video by default — the "direct download" box
+  // isn't limited to mp4/gif anymore, just anything the browser can
+  // fetch directly (subject to the host allowing cross-origin reads).
+  const types = acceptTypes ?? ["video/", "image/"];
 
   let url;
   try {
@@ -474,7 +478,7 @@ async function fetchMediaAsFile(rawUrl, { acceptTypes } = {}) {
   const blob = await response.blob();
   const contentType = blob.type || response.headers.get("content-type") || "";
   if (types.length && !types.some((t) => contentType.startsWith(t))) {
-    throw new Error("That URL doesn't point to an mp4 or gif file.");
+    throw new Error("That URL doesn't point to an image or video file.");
   }
 
   const fileName = mediaFileNameFromUrl(url.href, contentType);
@@ -523,7 +527,7 @@ function wireMediaDownloader({ urlInput, downloadButton, statusEl, spinnerEl, fa
   async function runDownload() {
     const trimmed = (urlInput.value || "").trim();
     if (!trimmed) {
-      setStatus("Paste a direct .mp4 or .gif link first.", "error");
+      setStatus("Paste a direct image or video link first.", "error");
       return;
     }
 
