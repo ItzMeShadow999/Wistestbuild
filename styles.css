@@ -2186,6 +2186,55 @@
 :root[data-theme="white"] .conv-format-select:focus { border: 2px solid #000; }
 :root[data-theme="white"] .conv-format-select option { background: #fff; color: #000; }
 
+/* ── Advanced Editor: native range sliders (Brightness/Contrast/etc, Angle) ──
+   This was missing entirely — Kawaii/Discord/Gothic all recolor these, but
+   White never got an override, so they fell through to the hardcoded
+   default purple track fill, thumb gradient, and hover/focus glow. */
+:root[data-theme="white"] #advancedEditorPanel input[type="range"]::-webkit-slider-track {
+  background:
+    linear-gradient(90deg, #000 0%, #000 calc(var(--pct, 0%)), #e0e0e0 calc(var(--pct, 0%)), #e0e0e0 100%);
+  box-shadow: none;
+}
+:root[data-theme="white"] #advancedEditorPanel input[type="range"]:hover::-webkit-slider-track {
+  box-shadow: none;
+}
+:root[data-theme="white"] #advancedEditorPanel input[type="range"]::-webkit-slider-thumb {
+  background: #fff;
+  border: 2px solid #000;
+  box-shadow: none;
+}
+:root[data-theme="white"] #advancedEditorPanel input[type="range"]::-webkit-slider-thumb:hover {
+  border-color: #000;
+  box-shadow: none;
+}
+:root[data-theme="white"] #advancedEditorPanel input[type="range"]::-webkit-slider-thumb:active {
+  box-shadow: none;
+}
+:root[data-theme="white"] #advancedEditorPanel input[type="range"]::-moz-range-track {
+  background:
+    linear-gradient(90deg, #000 0%, #000 calc(var(--pct, 0%)), #e0e0e0 calc(var(--pct, 0%)), #e0e0e0 100%);
+  box-shadow: none;
+}
+:root[data-theme="white"] #advancedEditorPanel input[type="range"]:hover::-moz-range-track {
+  box-shadow: none;
+}
+:root[data-theme="white"] #advancedEditorPanel input[type="range"]::-moz-range-thumb {
+  background: #fff;
+  border: 2px solid #000;
+  box-shadow: none;
+}
+:root[data-theme="white"] #advancedEditorPanel input[type="range"]::-moz-range-thumb:hover {
+  border-color: #000;
+  box-shadow: none;
+}
+:root[data-theme="white"] #advancedEditorPanel input[type="range"]::-moz-range-thumb:active {
+  box-shadow: none;
+}
+:root[data-theme="white"] #advancedEditorPanel input[type="range"]:focus-visible::-webkit-slider-thumb,
+:root[data-theme="white"] #advancedEditorPanel input[type="range"]:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 3px #fff, 0 0 0 5px #000;
+}
+
 /* ── Advanced Editor panel (previously left dark/unstyled — now flat B&W) ── */
 :root[data-theme="white"] #advancedEditorPanel .titlebar-brand,
 :root[data-theme="white"] #advancedEditorPanel .ae-brand {
@@ -2225,8 +2274,8 @@
 }
 :root[data-theme="white"] #advancedEditorPanel .preset-tile:hover,
 :root[data-theme="white"] #advancedEditorPanel .flip-btn:hover { background: #f0f0f0; }
-:root[data-theme="white"] #advancedEditorPanel .preset-tile.selected,
-:root[data-theme="white"] #advancedEditorPanel .swatch.selected { background: #000; }
+:root[data-theme="white"] #advancedEditorPanel .preset-tile.selected { background: #000; border-color: #000; }
+:root[data-theme="white"] #advancedEditorPanel .swatch.selected { background: #000; border-color: #000; }
 :root[data-theme="white"] #advancedEditorPanel .format-chip { background: #ffffff; border: 1px solid rgba(0,0,0,0.4); color: #333; }
 :root[data-theme="white"] #advancedEditorPanel .format-chip:hover { border-color: #000; color: #000; }
 :root[data-theme="white"] #advancedEditorPanel .format-chip.selected { background: #000; color: #fff; }
@@ -2248,7 +2297,7 @@
 :root[data-theme="white"] #advancedEditorPanel .filter-tile.selected { border: 2px solid #000; }
 :root[data-theme="white"] #advancedEditorPanel .rotation-ring { border: 1px solid #000; background: none; }
 :root[data-theme="white"] #advancedEditorPanel .rotation-ring:hover { border-color: #000; }
-:root[data-theme="white"] #advancedEditorPanel .rotation-handle::before { background: #000; }
+:root[data-theme="white"] #advancedEditorPanel .rotation-handle::before { background: #000; box-shadow: none; }
 :root[data-theme="white"] #advancedEditorPanel .rotation-val { color: #000; }
 :root[data-theme="white"] #advancedEditorPanel .flip-btn:hover { color: #000; }
 :root[data-theme="white"] #advancedEditorPanel .budget-bar-wrap { background: #f0f0f0; border: 1px solid #000; }
