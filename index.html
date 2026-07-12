@@ -459,9 +459,25 @@
         >
           <span>ℹ</span>
           <span
-            >GIF source detected. Only the first frame will be used — animated
-            GIF → still image conversion. For animated output, use the Widget
-            Framer tab.</span
+            >GIF source detected. Converting to a static GIF keeps only the
+            first frame. For animated GIF output, use the
+            <strong>Widget Framer</strong> tab.</span
+          >
+        </div>
+
+        <div
+          id="gifAllFramesNoteConv"
+          class="gif-note"
+          style="margin-top: 10px"
+          hidden
+        >
+          <span>ℹ</span>
+          <span
+            >Animated GIF detected
+            (<span id="gifAllFramesCountConv">0</span> frames). Converting to
+            this format will take a bit longer and download a
+            <strong>.zip</strong> file containing every frame as a separate
+            image, not just the first one.</span
           >
         </div>
 
