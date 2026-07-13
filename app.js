@@ -610,6 +610,47 @@ async function loadModernGif() {
   }
 }
 
+// Browsers have no native encoder for *animated* WEBP — canvas.toBlob("image/webp")
+// only ever produces a single-frame still, no matter how many frames the source has.
+// This mirrors loadModernGif() above but loads a WASM libwebp binding that exposes
+// an encodeAnimation() call for muxing multiple frames into one animated WEBP.
+// NOTE: this sandbox has no network access, so this loader (and the CDN package name/
+// version) could not be verified end-to-end here — check the console on first run.
+let webpEncoderPromise = null;
+
+async function loadWebpEncoder() {
+  if (webpEncoderPromise) return webpEncoderPromise;
+
+  webpEncoderPromise = (async () => {
+    const sources = [
+      "https://esm.sh/webp-wasm@1.0.6",
+      "https://cdn.jsdelivr.net/npm/webp-wasm@1.0.6/+esm"
+    ];
+
+    let lastError = null;
+    for (const source of sources) {
+      try {
+        const module = await import( source);
+        const encodeAnimation = module?.encodeAnimation ?? module?.default?.encodeAnimation;
+        if (typeof encodeAnimation === "function") {
+          return { encodeAnimation };
+        }
+        lastError = new Error(`Loaded ${source} but it did not expose an encodeAnimation() API.`);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError ?? new Error("Could not load the animated WEBP engine from any source.");
+  })();
+
+  try {
+    return await webpEncoderPromise;
+  } catch (error) {
+    webpEncoderPromise = null;
+    throw error;
+  }
+}
+
 
 
 function createPanelUI(refs) {
@@ -967,7 +1008,48 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     return /\.webp$/i.test(fileName);
   }
 
-  
+  async function isAnimatedWebp(file) {
+    if (!isWebpInput(file.name)) return false;
+    const bytes = new Uint8Array(await file.slice(0, 30).arrayBuffer());
+    if (bytes.length < 21) return false;
+    const tag = (start, len) => String.fromCharCode(...bytes.slice(start, start + len));
+    if (tag(0, 4) !== "RIFF" || tag(8, 4) !== "WEBP") return false;
+    if (tag(12, 4) !== "VP8X") return false; // VP8/VP8L chunks are always single-frame
+    const flags = bytes[20]; // first byte of the VP8X chunk payload
+    return (flags & 0x02) !== 0; // ANIM bit
+  }
+
+  async function decodeAnimatedWebpFrames(file) {
+    if (typeof ImageDecoder === "undefined") {
+      throw new Error("This browser can't decode animated WEBP frames. Try Chrome or Edge.");
+    }
+    const buffer = await file.arrayBuffer();
+    const decoder = new ImageDecoder({ data: buffer, type: "image/webp" });
+    await decoder.tracks.ready;
+    const track = decoder.tracks.selectedTrack;
+    const frameCount = track?.frameCount ?? 1;
+
+    const frames = [];
+    let width = 0, height = 0;
+    for (let i = 0; i < frameCount; i++) {
+      const { image } = await decoder.decode({ frameIndex: i });
+      width = image.displayWidth;
+      height = image.displayHeight;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d").drawImage(image, 0, 0);
+      const data = canvas.getContext("2d").getImageData(0, 0, width, height).data;
+      const delay = Math.max(20, Math.round((image.duration ?? 100000) / 1000)); // microseconds -> ms
+      image.close();
+
+      frames.push({ data, width, height, delay });
+    }
+    decoder.close();
+    return { width, height, frames };
+  }
+
   
   async function encodeCanvas(canvas, format) {
     if (format === "png") {
@@ -1147,15 +1229,125 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     };
   }
 
+  async function runAnimatedWebp(file, format) {
+    ui.setProgressState(true, 5, "Reading WEBP (5%)");
+    const { width, height, frames } = await decodeAnimatedWebpFrames(file);
+    const { finalTopStrip, finalRadius, topStripAuto, radiusAuto } = computeDimensions(width, height);
+    const totalFrames = frames.length || 1;
+
+    if (format !== "webp") {
+      
+      const frame = frames[0];
+      const frameCanvas = document.createElement("canvas");
+      frameCanvas.width = frame.width;
+      frameCanvas.height = frame.height;
+      frameCanvas.getContext("2d").putImageData(
+        new ImageData(new Uint8ClampedArray(frame.data), frame.width, frame.height), 0, 0
+      );
+
+      const outputCanvas = document.createElement("canvas");
+      outputCanvas.width = width;
+      outputCanvas.height = height;
+      applyWidgetEffect(outputCanvas.getContext("2d"), width, height, finalTopStrip, finalRadius, frameCanvas);
+
+      ui.setProgressState(true, 80, "Encoding image (80%)");
+      const { blob } = await encodeCanvas(outputCanvas, format);
+      clearObjectUrl(outputUrl);
+      outputUrl = URL.createObjectURL(blob);
+      ui.setProgressState(true, 100, "Done (100%)");
+
+      return {
+        outputName: outputName.value.trim() || getSuggestedOutputName(file.name, format),
+        previewUrl: outputUrl,
+        width, height,
+        topStrip: finalTopStrip,
+        radius: finalRadius,
+        autoCalculated: topStripAuto && radiusAuto,
+        frameCount: 1,
+        animated: false,
+        warning: [
+          sizeWarning(width, height),
+          `Source WEBP has ${totalFrames} frames — only the first frame was used because ${format.toUpperCase()} doesn't support animation.`,
+        ].filter(Boolean).join(" "),
+      };
+    }
+
+    let webpEncoder;
+    try {
+      webpEncoder = await loadWebpEncoder();
+    } catch (error) {
+      throw new Error(`Animated WEBP engine failed to load (${error?.message ?? error}). Check your connection and reload the page.`);
+    }
+
+    ui.setProgressState(true, 15, "Preparing frames (15%)");
+    const outputFrames = [];
+    for (let index = 0; index < frames.length; index++) {
+      const frame = frames[index];
+      const frameCanvas = document.createElement("canvas");
+      frameCanvas.width = frame.width;
+      frameCanvas.height = frame.height;
+      frameCanvas.getContext("2d").putImageData(
+        new ImageData(new Uint8ClampedArray(frame.data), frame.width, frame.height), 0, 0
+      );
+
+      const outputCanvas = document.createElement("canvas");
+      outputCanvas.width = width;
+      outputCanvas.height = height;
+      applyWidgetEffect(outputCanvas.getContext("2d"), width, height, finalTopStrip, finalRadius, frameCanvas);
+
+      const outputData = outputCanvas.getContext("2d").getImageData(0, 0, width, height).data;
+      outputFrames.push({ data: outputData, duration: frame.delay ?? 100 });
+
+      const percent = 15 + Math.round(((index + 1) / totalFrames) * 65);
+      ui.setProgressState(true, percent, `Preparing frames ${index + 1}/${totalFrames} (${percent}%)`);
+      
+      
+      await yieldToUI();
+    }
+
+    ui.setProgressState(true, 85, "Encoding WEBP (85%)");
+    const output = await webpEncoder.encodeAnimation({
+      width,
+      height,
+      hasAlpha: true,
+      frames: outputFrames,
+      loop: 0,
+      quality: highQualityAnimated.checked ? 90 : 60,
+    });
+
+    clearObjectUrl(outputUrl);
+    const blob = new Blob([output], { type: "image/webp" });
+    outputUrl = URL.createObjectURL(blob);
+    ui.setProgressState(true, 100, `Encoding frames ${totalFrames}/${totalFrames} (100%)`);
+
+    return {
+      outputName: outputName.value.trim() || getSuggestedOutputName(file.name, format),
+      previewUrl: outputUrl,
+      width, height,
+      topStrip: finalTopStrip,
+      radius: finalRadius,
+      autoCalculated: topStripAuto && radiusAuto,
+      frameCount: totalFrames,
+      animated: true,
+      warning: sizeWarning(width, height),
+    };
+  }
+
+  let selectedFileIsAnimatedWebp = false;
+
   async function handleSelectedFile(file) {
     if (!file) return;
+
+    selectedFileIsAnimatedWebp = await isAnimatedWebp(file);
 
     setSelectedFile(file);
     inputPath.value = file.name;
     outputName.value = getSuggestedOutputName(file.name, outputFormat.value);
     resetResultState();
 
-    ui.baseMeta = isWebpInput(file.name)
+    ui.baseMeta = selectedFileIsAnimatedWebp
+      ? "Previewing selected image. Animated WEBP stays animated WEBP on export."
+      : isWebpInput(file.name)
       ? "Previewing selected image. WEBP exports as a still frame."
       : "Previewing selected image.";
 
@@ -1213,16 +1405,23 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     
     
     const inputIsAnimatedGif = isGifInput(selectedFile.name);
-    const format = inputIsAnimatedGif ? "gif" : outputFormat.value;
+    const inputIsAnimatedWebp = !inputIsAnimatedGif && selectedFileIsAnimatedWebp;
+    const format = inputIsAnimatedGif ? "gif" : inputIsAnimatedWebp ? "webp" : outputFormat.value;
 
     if (inputIsAnimatedGif && outputFormat.value !== "gif") {
       outputFormat.value = "gif";
+      outputFormat.dispatchEvent(new Event("change"));
+    }
+    if (inputIsAnimatedWebp && outputFormat.value !== "webp") {
+      outputFormat.value = "webp";
       outputFormat.dispatchEvent(new Event("change"));
     }
 
     try {
       const result = inputIsAnimatedGif
         ? await runAnimatedGif(selectedFile, format)
+        : inputIsAnimatedWebp
+        ? await runAnimatedWebp(selectedFile, format)
         : await runStill(selectedFile, format);
 
       lastResult = result;
