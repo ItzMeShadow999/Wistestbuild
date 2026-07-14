@@ -612,6 +612,105 @@ function _probeEncodeAnimation(module) {
   return candidates.find((fn) => typeof fn === "function") ?? null;
 }
 
+// ---------------------------------------------------------------------------
+// Pure-JS animated WEBP muxer — fallback for Opera GX and any browser that
+// blocks cross-origin dynamic import() (ad blockers, strict CSP, etc.).
+//
+// Produces a valid RIFF/WEBP container with an ANIM chunk and one ANMF chunk
+// per frame. Each frame's raw RGBA data is encoded as a lossless VP8L bitstream
+// via the browser's own canvas.toBlob("image/webp") — so quality is whatever
+// the browser natively produces. No WASM, no CDN, no external dependency.
+// ---------------------------------------------------------------------------
+async function _inlineEncodeAnimation({ width, height, frames, loop = 0 }) {
+  // Encode each frame to a WebP blob using the browser canvas, then read the
+  // raw VP8 / VP8L / VP8X payload bytes out of the RIFF container.
+  function le16(v) { return [v & 0xff, (v >> 8) & 0xff]; }
+  function le32(v) {
+    return [v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff];
+  }
+  function tag(s) { return s.split("").map((c) => c.charCodeAt(0)); }
+
+  // Extract the inner VP8* chunk bytes from a single-frame WebP RIFF blob.
+  async function frameToVP8Bytes(rgba, fw, fh) {
+    const canvas = document.createElement("canvas");
+    canvas.width = fw;
+    canvas.height = fh;
+    canvas.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(rgba), fw, fh), 0, 0);
+    const blob = await canvasToBlob(canvas, "image/webp", 0.92);
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    // RIFF(4) + size(4) + WEBP(4) = 12 bytes header; then chunks follow
+    let pos = 12;
+    while (pos + 8 <= buf.length) {
+      const chunkTag = String.fromCharCode(buf[pos], buf[pos+1], buf[pos+2], buf[pos+3]);
+      const chunkSize = buf[pos+4] | (buf[pos+5] << 8) | (buf[pos+6] << 16) | (buf[pos+7] << 24);
+      // Skip VP8X wrapper — we want the raw VP8/VP8L chunk inside
+      if (chunkTag === "VP8X") { pos += 8 + chunkSize + (chunkSize & 1); continue; }
+      if (chunkTag === "VP8 " || chunkTag === "VP8L" || chunkTag === "ALPH") {
+        // Return from this chunk onward (may be VP8L alone or ALPH+VP8L)
+        return buf.slice(pos, pos + 8 + chunkSize + (chunkSize & 1));
+      }
+      pos += 8 + chunkSize + (chunkSize & 1);
+    }
+    throw new Error("Could not extract VP8 payload from browser-encoded WebP frame.");
+  }
+
+  const encodedFrames = [];
+  for (const frame of frames) {
+    const vp8bytes = await frameToVP8Bytes(frame.data, width, height);
+    encodedFrames.push({ vp8bytes, duration: frame.duration ?? 100 });
+  }
+
+  // Build the RIFF/WEBP byte array
+  const parts = [];
+  function push(arr) { parts.push(arr instanceof Uint8Array ? arr : new Uint8Array(arr)); }
+
+  // VP8X chunk (flags: animation=bit1, alpha=bit4)
+  push(tag("VP8X"));
+  push(le32(10)); // chunk size
+  push(le32(0x00000012)); // flags: animation(bit1) + alpha(bit4)
+  push([...le16(width - 1),  0]); // canvas width  minus 1, 24-bit LE
+  push([...le16(height - 1), 0]); // canvas height minus 1, 24-bit LE
+
+  // ANIM chunk (background colour, loop count)
+  push(tag("ANIM"));
+  push(le32(6)); // chunk size
+  push(le32(0x00000000)); // background colour BGRA = transparent black
+  push(le16(loop));
+
+  // ANMF chunks — one per frame
+  for (const { vp8bytes, duration } of encodedFrames) {
+    const frameDataSize = vp8bytes.length;
+    const anmfPayloadSize = 16 + frameDataSize;
+    push(tag("ANMF"));
+    push(le32(anmfPayloadSize));
+    push(le32(0)); // frame X offset (24-bit / 2), zero = left-aligned
+    push(le32(0)); // frame Y offset (24-bit / 2), zero = top-aligned
+    push([...le16(width - 1),  0]); // frame width  minus 1
+    push([...le16(height - 1), 0]); // frame height minus 1
+    push([duration & 0xff, (duration >> 8) & 0xff, (duration >> 16) & 0xff]); // 24-bit duration ms
+    push([0x00]); // flags: no blending, dispose=0
+    push(vp8bytes);
+    if (frameDataSize & 1) push([0]); // RIFF chunks must be even-padded
+  }
+
+  // Compute total RIFF payload size (everything after "RIFF????WEBP")
+  let payloadSize = 4; // "WEBP"
+  for (const p of parts) payloadSize += p.length;
+
+  const allParts = [
+    new Uint8Array(tag("RIFF")),
+    new Uint8Array(le32(payloadSize)),
+    new Uint8Array(tag("WEBP")),
+    ...parts,
+  ];
+  let total = 0;
+  for (const p of allParts) total += p.length;
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const p of allParts) { out.set(p, offset); offset += p.length; }
+  return out;
+}
+
 async function loadWebpEncoder() {
   if (webpEncoderPromise) return webpEncoderPromise;
 
@@ -619,7 +718,7 @@ async function loadWebpEncoder() {
     const sources = [
       "https://esm.sh/webp-wasm@1.0.6",
       "https://cdn.jsdelivr.net/npm/webp-wasm@1.0.6/+esm",
-      "https://esm.sh/webp-wasm",          // latest, no pinned version
+      "https://esm.sh/webp-wasm",
       "https://cdn.jsdelivr.net/npm/webp-wasm/+esm",
     ];
 
@@ -636,7 +735,11 @@ async function loadWebpEncoder() {
         lastError = error;
       }
     }
-    throw lastError ?? new Error("Could not load the animated WEBP engine from any source.");
+
+    // All CDN sources failed (common in Opera GX with built-in blocker, or
+    // any browser with a strict CSP). Fall back to the inline pure-JS muxer.
+    console.warn("[WIS] All CDN WEBP encoder sources failed — using inline JS fallback.", lastError);
+    return { encodeAnimation: _inlineEncodeAnimation };
   })();
 
   try {
@@ -996,35 +1099,114 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     return (flags & 0x02) !== 0; 
   }
 
-  async function decodeAnimatedWebpFrames(file) {
-    if (typeof ImageDecoder === "undefined") {
-      throw new Error("This browser can't decode animated WEBP frames. Try Chrome or Edge.");
+  // Fallback animated WEBP decoder for browsers without ImageDecoder (e.g. Opera GX).
+  // Parses RIFF/WEBP bytes, extracts ANMF chunks, and renders each frame by
+  // creating a single-frame WebP blob and drawing it onto a canvas.
+  async function _decodeAnimatedWebpFallback(buffer) {
+    const u8 = new Uint8Array(buffer);
+    function readU32LE(pos) {
+      return u8[pos] | (u8[pos+1] << 8) | (u8[pos+2] << 16) | (u8[pos+3] << 24);
     }
-    const buffer = await file.arrayBuffer();
-    const decoder = new ImageDecoder({ data: buffer, type: "image/webp" });
-    await decoder.tracks.ready;
-    const track = decoder.tracks.selectedTrack;
-    const frameCount = track?.frameCount ?? 1;
+    function readU24LE(pos) {
+      return u8[pos] | (u8[pos+1] << 8) | (u8[pos+2] << 16);
+    }
+    function chunkTag(pos) {
+      return String.fromCharCode(u8[pos], u8[pos+1], u8[pos+2], u8[pos+3]);
+    }
+
+    // Parse canvas dimensions from VP8X chunk
+    let canvasW = 0, canvasH = 0;
+    let pos = 12; // skip RIFF(4) + size(4) + WEBP(4)
+    while (pos + 8 <= u8.length) {
+      const tag = chunkTag(pos);
+      const size = readU32LE(pos + 4);
+      if (tag === "VP8X") {
+        canvasW = readU24LE(pos + 12) + 1;
+        canvasH = readU24LE(pos + 15) + 1;
+      }
+      pos += 8 + size + (size & 1);
+    }
+    if (!canvasW || !canvasH) throw new Error("Could not read canvas dimensions from animated WEBP.");
+
+    // Collect ANMF chunks
+    const anmfChunks = [];
+    pos = 12;
+    while (pos + 8 <= u8.length) {
+      const tag = chunkTag(pos);
+      const size = readU32LE(pos + 4);
+      if (tag === "ANMF") anmfChunks.push({ pos, size });
+      pos += 8 + size + (size & 1);
+    }
+    if (anmfChunks.length === 0) throw new Error("No ANMF frames found in animated WEBP.");
 
     const frames = [];
-    let width = 0, height = 0;
-    for (let i = 0; i < frameCount; i++) {
-      const { image } = await decoder.decode({ frameIndex: i });
-      width = image.displayWidth;
-      height = image.displayHeight;
+    for (const { pos: aPos, size: aSize } of anmfChunks) {
+      // ANMF payload: X(3) Y(3) W(3) H(3) duration(3) flags(1) = 16 bytes, then frame data
+      const duration = readU24LE(aPos + 8 + 12);
+      const frameData = u8.slice(aPos + 8 + 16, aPos + 8 + aSize);
+
+      // Wrap the raw VP8/VP8L chunk in a minimal valid single-frame RIFF/WEBP container
+      const riffPayload = 4 + frameData.length; // "WEBP" + data
+      const riff = new Uint8Array(12 + frameData.length);
+      const dv = new DataView(riff.buffer);
+      riff.set([0x52,0x49,0x46,0x46], 0); // RIFF
+      dv.setUint32(4, riffPayload, true);
+      riff.set([0x57,0x45,0x42,0x50], 8); // WEBP
+      riff.set(frameData, 12);
+
+      const blob = new Blob([riff], { type: "image/webp" });
+      const url = URL.createObjectURL(blob);
+      const img = await loadImageElement(url);
+      URL.revokeObjectURL(url);
 
       const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      canvas.getContext("2d").drawImage(image, 0, 0);
-      const data = canvas.getContext("2d").getImageData(0, 0, width, height).data;
-      const delay = Math.max(20, Math.round((image.duration ?? 100000) / 1000)); 
-      image.close();
-
-      frames.push({ data, width, height, delay });
+      canvas.width = canvasW;
+      canvas.height = canvasH;
+      canvas.getContext("2d").drawImage(img, 0, 0);
+      const data = canvas.getContext("2d").getImageData(0, 0, canvasW, canvasH).data;
+      frames.push({ data, width: canvasW, height: canvasH, delay: Math.max(20, duration) });
     }
-    decoder.close();
-    return { width, height, frames };
+    return { width: canvasW, height: canvasH, frames };
+  }
+
+  async function decodeAnimatedWebpFrames(file) {
+    const buffer = await file.arrayBuffer();
+
+    // Try the modern ImageDecoder API first (Chrome, Edge, newer Opera)
+    if (typeof ImageDecoder !== "undefined") {
+      try {
+        const decoder = new ImageDecoder({ data: buffer, type: "image/webp" });
+        await decoder.tracks.ready;
+        const track = decoder.tracks.selectedTrack;
+        const frameCount = track?.frameCount ?? 1;
+
+        const frames = [];
+        let width = 0, height = 0;
+        for (let i = 0; i < frameCount; i++) {
+          const { image } = await decoder.decode({ frameIndex: i });
+          width = image.displayWidth;
+          height = image.displayHeight;
+
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext("2d").drawImage(image, 0, 0);
+          const data = canvas.getContext("2d").getImageData(0, 0, width, height).data;
+          const delay = Math.max(20, Math.round((image.duration ?? 100000) / 1000));
+          image.close();
+
+          frames.push({ data, width, height, delay });
+        }
+        decoder.close();
+        return { width, height, frames };
+      } catch (e) {
+        // ImageDecoder exists but failed (some Opera GX builds) — fall through
+        console.warn("[WIS] ImageDecoder failed, trying RIFF fallback:", e);
+      }
+    }
+
+    // Pure-JS RIFF fallback — works in Opera GX and any browser without ImageDecoder
+    return _decodeAnimatedWebpFallback(buffer);
   }
 
   async function encodeCanvas(canvas, format) {
@@ -1250,10 +1432,10 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     try {
       webpEncoder = await loadWebpEncoder();
     } catch (error) {
+      // loadWebpEncoder only throws if even the inline fallback somehow failed
       throw new Error(
         `Animated WEBP engine failed to load (${error?.message ?? error}). ` +
-        `This is usually caused by a CDN outage or a content-security-policy blocking dynamic imports. ` +
-        `Try reloading the page, or disable any ad-blocker / CSP extension for this site.`
+        `Try reloading the page. If you are using Opera GX, make sure the built-in ad blocker is not blocking this page.`
       );
     }
 
