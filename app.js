@@ -630,8 +630,7 @@ async function _inlineEncodeAnimation({ width, height, frames, loop = 0 }) {
   }
   function tag(s) { return s.split("").map((c) => c.charCodeAt(0)); }
 
-  // Extract all inner VP8* chunk bytes from a single-frame WebP RIFF blob.
-  // Must collect ALPH + VP8 (or just VP8L) together — both are needed for alpha frames.
+  // Extract the inner VP8* chunk bytes from a single-frame WebP RIFF blob.
   async function frameToVP8Bytes(rgba, fw, fh) {
     const canvas = document.createElement("canvas");
     canvas.width = fw;
@@ -639,24 +638,20 @@ async function _inlineEncodeAnimation({ width, height, frames, loop = 0 }) {
     canvas.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(rgba), fw, fh), 0, 0);
     const blob = await canvasToBlob(canvas, "image/webp", 0.92);
     const buf = new Uint8Array(await blob.arrayBuffer());
-    let pos = 12; // skip RIFF(4) + size(4) + WEBP(4)
-    const collected = [];
+    // RIFF(4) + size(4) + WEBP(4) = 12 bytes header; then chunks follow
+    let pos = 12;
     while (pos + 8 <= buf.length) {
       const chunkTag = String.fromCharCode(buf[pos], buf[pos+1], buf[pos+2], buf[pos+3]);
       const chunkSize = buf[pos+4] | (buf[pos+5] << 8) | (buf[pos+6] << 16) | (buf[pos+7] << 24);
-      const paddedSize = chunkSize + (chunkSize & 1);
-      if (chunkTag === "VP8X") { pos += 8 + paddedSize; continue; }
-      if (chunkTag === "ALPH" || chunkTag === "VP8 " || chunkTag === "VP8L") {
-        collected.push(buf.slice(pos, pos + 8 + paddedSize));
+      // Skip VP8X wrapper — we want the raw VP8/VP8L chunk inside
+      if (chunkTag === "VP8X") { pos += 8 + chunkSize + (chunkSize & 1); continue; }
+      if (chunkTag === "VP8 " || chunkTag === "VP8L" || chunkTag === "ALPH") {
+        // Return from this chunk onward (may be VP8L alone or ALPH+VP8L)
+        return buf.slice(pos, pos + 8 + chunkSize + (chunkSize & 1));
       }
-      pos += 8 + paddedSize;
+      pos += 8 + chunkSize + (chunkSize & 1);
     }
-    if (collected.length === 0) throw new Error("Could not extract VP8 payload from browser-encoded WebP frame.");
-    const total = collected.reduce((n, c) => n + c.length, 0);
-    const merged = new Uint8Array(total);
-    let off = 0;
-    for (const c of collected) { merged.set(c, off); off += c.length; }
-    return merged;
+    throw new Error("Could not extract VP8 payload from browser-encoded WebP frame.");
   }
 
   const encodedFrames = [];
@@ -683,18 +678,15 @@ async function _inlineEncodeAnimation({ width, height, frames, loop = 0 }) {
   push(le16(loop));
 
   // ANMF chunks — one per frame
-  // ANMF payload layout (per spec): X(3) Y(3) W(3) H(3) duration(3) flags(1) = 16 bytes, then frame data
-  // X and Y are stored as (value / 2) in 24-bit LE (must be even; top-left = 0,0 → 0x00 0x00 0x00)
-  // W and H are stored as (value - 1) in 24-bit LE
   for (const { vp8bytes, duration } of encodedFrames) {
     const frameDataSize = vp8bytes.length;
     const anmfPayloadSize = 16 + frameDataSize;
     push(tag("ANMF"));
     push(le32(anmfPayloadSize));
-    push([0x00, 0x00, 0x00]); // X offset / 2, 24-bit LE = 0
-    push([0x00, 0x00, 0x00]); // Y offset / 2, 24-bit LE = 0
-    push([...le16(width - 1),  0]); // frame width  minus 1, 24-bit LE
-    push([...le16(height - 1), 0]); // frame height minus 1, 24-bit LE
+    push(le32(0)); // frame X offset (24-bit / 2), zero = left-aligned
+    push(le32(0)); // frame Y offset (24-bit / 2), zero = top-aligned
+    push([...le16(width - 1),  0]); // frame width  minus 1
+    push([...le16(height - 1), 0]); // frame height minus 1
     push([duration & 0xff, (duration >> 8) & 0xff, (duration >> 16) & 0xff]); // 24-bit duration ms
     push([0x00]); // flags: no blending, dispose=0
     push(vp8bytes);
@@ -1054,7 +1046,11 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
 
   function applyWidgetEffect(context, width, height, finalTopStrip, finalRadius, source) {
     context.clearRect(0, 0, width, height);
-    context.drawImage(source, 0, finalTopStrip, width, height - finalTopStrip);
+    // Crop away the top strip from the source, then draw the remaining pixels
+    // at their correct destination size so the image is never squished.
+    // drawImage(source, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight)
+    const srcHeight = height - finalTopStrip;
+    context.drawImage(source, 0, finalTopStrip, width, srcHeight, 0, finalTopStrip, width, srcHeight);
 
     if (finalRadius > 0) {
       context.save();
