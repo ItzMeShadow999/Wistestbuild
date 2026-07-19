@@ -999,25 +999,37 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
 
   let titlebarErrorFlashTimeout = null;
 
-  function setTitlebarMessage(message, isError = false) {
+  function setTitlebarMessage(message, errorText = null) {
     refs.status.textContent = "";
     refs.status.dataset.tone = "neutral";
-    titlebarStatus.textContent = message;
 
     if (titlebarErrorFlashTimeout) {
       clearTimeout(titlebarErrorFlashTimeout);
       titlebarErrorFlashTimeout = null;
     }
 
-    if (isError) {
-      titlebarStatus.classList.add("titlebar-status-error");
-      titlebarErrorFlashTimeout = setTimeout(() => {
-        titlebarStatus.classList.remove("titlebar-status-error");
-        titlebarErrorFlashTimeout = null;
-      }, 2000);
-    } else {
-      titlebarStatus.classList.remove("titlebar-status-error");
+    titlebarStatus.textContent = "";
+
+    const idx = errorText ? message.indexOf(errorText) : -1;
+    if (idx === -1) {
+      titlebarStatus.textContent = message;
+      return;
     }
+
+    const before = message.slice(0, idx);
+    const errorSpan = document.createElement("span");
+    errorSpan.className = "titlebar-status-error";
+    errorSpan.textContent = errorText;
+    const after = message.slice(idx + errorText.length);
+
+    if (before) titlebarStatus.append(document.createTextNode(before));
+    titlebarStatus.append(errorSpan);
+    if (after) titlebarStatus.append(document.createTextNode(after));
+
+    titlebarErrorFlashTimeout = setTimeout(() => {
+      errorSpan.classList.remove("titlebar-status-error");
+      titlebarErrorFlashTimeout = null;
+    }, 2000);
   }
 
   function getAutoValue(baseValue, exponent, width, height) {
@@ -1606,8 +1618,8 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
       ui.setPreviewMeta(ui.baseMeta);
 
       if (result.warning) {
-        const isSizeWarning = result.warning.includes(`is not ${REFERENCE_SIZE}x${REFERENCE_SIZE}`);
-        setTitlebarMessage(result.warning, isSizeWarning);
+        const sizeWarningSentence = `Widget may look odd if the original image size is not ${REFERENCE_SIZE}x${REFERENCE_SIZE}.`;
+        setTitlebarMessage(result.warning, result.warning.includes(sizeWarningSentence) ? sizeWarningSentence : null);
       } else {
         ui.setStatus("", "success");
       }
