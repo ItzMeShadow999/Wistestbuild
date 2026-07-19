@@ -1046,7 +1046,14 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
 
   function applyWidgetEffect(context, width, height, finalTopStrip, finalRadius, source) {
     context.clearRect(0, 0, width, height);
-    context.drawImage(source, 0, finalTopStrip, width, height - finalTopStrip);
+    // Draw the source at its full, native size. `finalTopStrip` only controls
+    // where the rounded-corner cutout mask starts below (see destination-out
+    // path) — it must not reposition or rescale the image itself. The old
+    // code passed `finalTopStrip` as dy and `height - finalTopStrip` as
+    // dHeight, which squashed the whole image into the remaining height and
+    // shoved it downward, producing a squished sliver (or nothing at all
+    // when finalTopStrip >= height).
+    context.drawImage(source, 0, 0, width, height);
 
     if (finalRadius > 0) {
       context.save();
