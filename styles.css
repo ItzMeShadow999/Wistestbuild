@@ -95,7 +95,7 @@
         min-width: 0;
         transition: color 0.3s ease, text-shadow 0.3s ease;
       }
-      #titlebarStatus.titlebar-status-error {
+      #titlebarStatus .titlebar-status-error {
         color: var(--error);
         animation: titlebarErrorGlow 0.6s ease-in-out infinite;
       }
