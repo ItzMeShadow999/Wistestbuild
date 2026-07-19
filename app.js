@@ -997,17 +997,18 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
   }
   ui.updateTitlebar = updateTitlebarStatus;
 
-  let titlebarErrorFlashTimeout = null;
+  let titlebarErrorTimeouts = [];
+
+  function clearTitlebarErrorTimeouts() {
+    titlebarErrorTimeouts.forEach((id) => clearTimeout(id));
+    titlebarErrorTimeouts = [];
+  }
 
   function setTitlebarMessage(message, errorText = null) {
     refs.status.textContent = "";
     refs.status.dataset.tone = "neutral";
 
-    if (titlebarErrorFlashTimeout) {
-      clearTimeout(titlebarErrorFlashTimeout);
-      titlebarErrorFlashTimeout = null;
-    }
-
+    clearTitlebarErrorTimeouts();
     titlebarStatus.textContent = "";
 
     const idx = errorText ? message.indexOf(errorText) : -1;
@@ -1026,10 +1027,12 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     titlebarStatus.append(errorSpan);
     if (after) titlebarStatus.append(document.createTextNode(after));
 
-    titlebarErrorFlashTimeout = setTimeout(() => {
-      errorSpan.classList.remove("titlebar-status-error");
-      titlebarErrorFlashTimeout = null;
-    }, 2000);
+    titlebarErrorTimeouts.push(setTimeout(() => {
+      errorSpan.classList.add("titlebar-status-error-out");
+      titlebarErrorTimeouts.push(setTimeout(() => {
+        errorSpan.classList.remove("titlebar-status-error", "titlebar-status-error-out");
+      }, 400));
+    }, 3500));
   }
 
   function getAutoValue(baseValue, exponent, width, height) {
