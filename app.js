@@ -997,27 +997,11 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
   }
   ui.updateTitlebar = updateTitlebarStatus;
 
-  function setTitlebarMessage(message, errorText = null) {
+  function setTitlebarMessage(message) {
     refs.status.textContent = "";
     refs.status.dataset.tone = "neutral";
 
-    titlebarStatus.textContent = "";
-
-    const idx = errorText ? message.indexOf(errorText) : -1;
-    if (idx === -1) {
-      titlebarStatus.textContent = message;
-      return;
-    }
-
-    const before = message.slice(0, idx);
-    const errorSpan = document.createElement("span");
-    errorSpan.className = "titlebar-status-error";
-    errorSpan.textContent = errorText;
-    const after = message.slice(idx + errorText.length);
-
-    if (before) titlebarStatus.append(document.createTextNode(before));
-    titlebarStatus.append(errorSpan);
-    if (after) titlebarStatus.append(document.createTextNode(after));
+    titlebarStatus.textContent = message;
   }
 
   function getAutoValue(baseValue, exponent, width, height) {
@@ -1606,8 +1590,7 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
       ui.setPreviewMeta(ui.baseMeta);
 
       if (result.warning) {
-        const sizeWarningSentence = `Widget may look odd if the original image size is not ${REFERENCE_SIZE}x${REFERENCE_SIZE}.`;
-        setTitlebarMessage(result.warning, result.warning.includes(sizeWarningSentence) ? sizeWarningSentence : null);
+        setTitlebarMessage(result.warning);
       } else {
         ui.setStatus("", "success");
       }
