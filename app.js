@@ -956,7 +956,6 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     progressBar: document.querySelector("#progressBar"),
     progressLabel: document.querySelector("#progressLabel"),
     previewImage: document.querySelector("#previewImage"),
-    previewErrorToast: document.querySelector("#previewErrorToast"),
     previewMeta: document.querySelector("#previewMeta"),
     status: document.querySelector("#status"),
   };
@@ -998,34 +997,10 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
   }
   ui.updateTitlebar = updateTitlebarStatus;
 
-  let titlebarErrorTimeouts = [];
-
-  function clearTitlebarErrorTimeouts() {
-    titlebarErrorTimeouts.forEach((id) => clearTimeout(id));
-    titlebarErrorTimeouts = [];
-  }
-
-  function showPreviewErrorToast(text) {
-    const toast = refs.previewErrorToast;
-    if (!toast) return;
-    toast.classList.remove("preview-error-toast-out");
-    toast.textContent = text;
-    toast.hidden = false;
-
-    titlebarErrorTimeouts.push(setTimeout(() => {
-      toast.classList.add("preview-error-toast-out");
-      titlebarErrorTimeouts.push(setTimeout(() => {
-        toast.hidden = true;
-        toast.classList.remove("preview-error-toast-out");
-      }, 400));
-    }, 3500));
-  }
-
   function setTitlebarMessage(message, errorText = null) {
     refs.status.textContent = "";
     refs.status.dataset.tone = "neutral";
 
-    clearTitlebarErrorTimeouts();
     titlebarStatus.textContent = "";
 
     const idx = errorText ? message.indexOf(errorText) : -1;
@@ -1043,8 +1018,6 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     if (before) titlebarStatus.append(document.createTextNode(before));
     titlebarStatus.append(errorSpan);
     if (after) titlebarStatus.append(document.createTextNode(after));
-
-    showPreviewErrorToast(errorText);
   }
 
   function getAutoValue(baseValue, exponent, width, height) {
