@@ -3031,4 +3031,18 @@ document.getElementById('canvasBgTransparent').addEventListener('change', () => 
     buildSwitcherUI();
 
     var existing = root.getAttribute('data-theme');
-    if (existing && THEME_LOOKUP[ex
+    if (existing && THEME_LOOKUP[existing]) {
+      currentTheme = existing;
+      updateTriggerUI();
+      updateActiveStates();
+    } else {
+      applyTheme(readStoredTheme(), { persist: false, silent: true });
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
