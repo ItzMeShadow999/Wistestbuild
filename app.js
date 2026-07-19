@@ -1046,11 +1046,7 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
 
   function applyWidgetEffect(context, width, height, finalTopStrip, finalRadius, source) {
     context.clearRect(0, 0, width, height);
-    // Crop away the top strip from the source, then draw the remaining pixels
-    // at their correct destination size so the image is never squished.
-    // drawImage(source, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight)
-    const srcHeight = height - finalTopStrip;
-    context.drawImage(source, 0, finalTopStrip, width, srcHeight, 0, finalTopStrip, width, srcHeight);
+    context.drawImage(source, 0, finalTopStrip, width, height - finalTopStrip);
 
     if (finalRadius > 0) {
       context.save();
@@ -2399,13 +2395,15 @@ function loadFile(file) {
   const img = new Image();
   img.onload = () => {
     state.originalImage = img;
-    if (!state.canvasW) {
-      state.canvasW     = img.naturalWidth;
-      state.canvasH     = img.naturalHeight;
-      state.aspectRatio = img.naturalWidth / img.naturalHeight;
-      document.getElementById('canvasW').value = state.canvasW;
-      document.getElementById('canvasH').value = state.canvasH;
-    }
+    // Always reset the canvas to the newly loaded image's own dimensions.
+    // (Previously this only ran once ever, via `if (!state.canvasW)`, so every
+    // image loaded after the first kept the *first* image's canvas size and
+    // got stretched/cropped into that stale frame.)
+    state.canvasW     = img.naturalWidth;
+    state.canvasH     = img.naturalHeight;
+    state.aspectRatio = img.naturalWidth / img.naturalHeight;
+    document.getElementById('canvasW').value = state.canvasW;
+    document.getElementById('canvasH').value = state.canvasH;
     advOutputName.value    = getSuggestedName(file.name);
     advApplyBtn.disabled   = false;
     canvasEmpty.hidden     = true;
