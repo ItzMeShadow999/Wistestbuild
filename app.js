@@ -997,10 +997,27 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
   }
   ui.updateTitlebar = updateTitlebarStatus;
 
-  function setTitlebarMessage(message) {
+  let titlebarErrorFlashTimeout = null;
+
+  function setTitlebarMessage(message, isError = false) {
     refs.status.textContent = "";
     refs.status.dataset.tone = "neutral";
     titlebarStatus.textContent = message;
+
+    if (titlebarErrorFlashTimeout) {
+      clearTimeout(titlebarErrorFlashTimeout);
+      titlebarErrorFlashTimeout = null;
+    }
+
+    if (isError) {
+      titlebarStatus.classList.add("titlebar-status-error");
+      titlebarErrorFlashTimeout = setTimeout(() => {
+        titlebarStatus.classList.remove("titlebar-status-error");
+        titlebarErrorFlashTimeout = null;
+      }, 2000);
+    } else {
+      titlebarStatus.classList.remove("titlebar-status-error");
+    }
   }
 
   function getAutoValue(baseValue, exponent, width, height) {
@@ -1046,14 +1063,7 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
 
   function applyWidgetEffect(context, width, height, finalTopStrip, finalRadius, source) {
     context.clearRect(0, 0, width, height);
-    // Draw the source at its full, native size. `finalTopStrip` only controls
-    // where the rounded-corner cutout mask starts below (see destination-out
-    // path) — it must not reposition or rescale the image itself. The old
-    // code passed `finalTopStrip` as dy and `height - finalTopStrip` as
-    // dHeight, which squashed the whole image into the remaining height and
-    // shoved it downward, producing a squished sliver (or nothing at all
-    // when finalTopStrip >= height).
-    context.drawImage(source, 0, 0, width, height);
+    context.drawImage(source, 0, finalTopStrip, width, height - finalTopStrip);
 
     if (finalRadius > 0) {
       context.save();
@@ -1596,7 +1606,8 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
       ui.setPreviewMeta(ui.baseMeta);
 
       if (result.warning) {
-        setTitlebarMessage(result.warning);
+        const isSizeWarning = result.warning.includes(`is not ${REFERENCE_SIZE}x${REFERENCE_SIZE}`);
+        setTitlebarMessage(result.warning, isSizeWarning);
       } else {
         ui.setStatus("", "success");
       }
@@ -2402,15 +2413,13 @@ function loadFile(file) {
   const img = new Image();
   img.onload = () => {
     state.originalImage = img;
-    // Always reset the canvas to the newly loaded image's own dimensions.
-    // (Previously this only ran once ever, via `if (!state.canvasW)`, so every
-    // image loaded after the first kept the *first* image's canvas size and
-    // got stretched/cropped into that stale frame.)
-    state.canvasW     = img.naturalWidth;
-    state.canvasH     = img.naturalHeight;
-    state.aspectRatio = img.naturalWidth / img.naturalHeight;
-    document.getElementById('canvasW').value = state.canvasW;
-    document.getElementById('canvasH').value = state.canvasH;
+    if (!state.canvasW) {
+      state.canvasW     = img.naturalWidth;
+      state.canvasH     = img.naturalHeight;
+      state.aspectRatio = img.naturalWidth / img.naturalHeight;
+      document.getElementById('canvasW').value = state.canvasW;
+      document.getElementById('canvasH').value = state.canvasH;
+    }
     advOutputName.value    = getSuggestedName(file.name);
     advApplyBtn.disabled   = false;
     canvasEmpty.hidden     = true;
