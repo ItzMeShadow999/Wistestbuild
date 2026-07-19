@@ -956,6 +956,7 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     progressBar: document.querySelector("#progressBar"),
     progressLabel: document.querySelector("#progressLabel"),
     previewImage: document.querySelector("#previewImage"),
+    previewErrorToast: document.querySelector("#previewErrorToast"),
     previewMeta: document.querySelector("#previewMeta"),
     status: document.querySelector("#status"),
   };
@@ -1004,6 +1005,22 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     titlebarErrorTimeouts = [];
   }
 
+  function showPreviewErrorToast(text) {
+    const toast = refs.previewErrorToast;
+    if (!toast) return;
+    toast.classList.remove("preview-error-toast-out");
+    toast.textContent = text;
+    toast.hidden = false;
+
+    titlebarErrorTimeouts.push(setTimeout(() => {
+      toast.classList.add("preview-error-toast-out");
+      titlebarErrorTimeouts.push(setTimeout(() => {
+        toast.hidden = true;
+        toast.classList.remove("preview-error-toast-out");
+      }, 400));
+    }, 3500));
+  }
+
   function setTitlebarMessage(message, errorText = null) {
     refs.status.textContent = "";
     refs.status.dataset.tone = "neutral";
@@ -1027,12 +1044,7 @@ document.querySelectorAll(".warn-callout-close").forEach((btn) => {
     titlebarStatus.append(errorSpan);
     if (after) titlebarStatus.append(document.createTextNode(after));
 
-    titlebarErrorTimeouts.push(setTimeout(() => {
-      errorSpan.classList.add("titlebar-status-error-out");
-      titlebarErrorTimeouts.push(setTimeout(() => {
-        errorSpan.classList.remove("titlebar-status-error", "titlebar-status-error-out");
-      }, 400));
-    }, 3500));
+    showPreviewErrorToast(errorText);
   }
 
   function getAutoValue(baseValue, exponent, width, height) {
@@ -3019,18 +3031,4 @@ document.getElementById('canvasBgTransparent').addEventListener('change', () => 
     buildSwitcherUI();
 
     var existing = root.getAttribute('data-theme');
-    if (existing && THEME_LOOKUP[existing]) {
-      currentTheme = existing;
-      updateTriggerUI();
-      updateActiveStates();
-    } else {
-      applyTheme(readStoredTheme(), { persist: false, silent: true });
-    }
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-})();
+    if (existing && THEME_LOOKUP[ex
