@@ -93,43 +93,6 @@
         font-family: var(--font-mono);
         flex: 1;
         min-width: 0;
-        transition: color 0.3s ease;
-      }
-      #titlebarStatus .titlebar-status-error {
-        color: var(--error);
-        text-decoration: underline;
-        text-underline-offset: 2px;
-      }
-
-      .preview-error-toast {
-        position: absolute;
-        top: 14px;
-        left: 14px;
-        z-index: 3;
-        max-width: calc(100% - 28px);
-        padding: 8px 12px;
-        border-radius: var(--radius-sm);
-        background: rgba(10,10,14,0.92);
-        border: 1px solid rgba(252,165,165,0.35);
-        color: var(--error);
-        text-decoration: underline;
-        text-underline-offset: 2px;
-        font-size: 12px;
-        line-height: 1.4;
-        font-family: var(--font-mono);
-        pointer-events: none;
-        animation: previewErrorSlideIn 0.4s ease-out forwards;
-      }
-      .preview-error-toast.preview-error-toast-out {
-        animation: previewErrorSlideOut 0.4s ease-in forwards;
-      }
-      @keyframes previewErrorSlideIn {
-        from { transform: translateX(-32px); opacity: 0; }
-        to   { transform: translateX(0); opacity: 1; }
-      }
-      @keyframes previewErrorSlideOut {
-        from { transform: translateX(0); opacity: 1; }
-        to   { transform: translateX(-32px); opacity: 0; }
       }
 
       .main-tabs {
